@@ -20,10 +20,12 @@ export default class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Load tilemap and tilesets
-    this.load.tilemapTiledJSON("tilemap", "/assets/newtilemap.json");
+    // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
+    
+    // Load tilemap after images
+    this.load.tilemapTiledJSON("tilemap", "/assets/theMap.json");
 
     // Load player spritesheet (64x128: 4 frames x 8 directions, each 16x16)
     this.load.spritesheet("player", "/assets/player.png", {
@@ -82,7 +84,15 @@ export default class GameScene extends Phaser.Scene {
     );
     const doorTileset = this.map.addTilesetImage("Door", "Door");
 
-    // Create layer with both tilesets
+    // Room dimensions
+    const roomStartRow = 4;
+    const roomEndRow = 16;
+    const roomHeight = roomEndRow - roomStartRow + 1;
+    const totalRepeats = 19;
+    const tileSize = 16;
+    const scale = 4;
+
+    // Create layer with both tilesets at origin
     if (dungeonTileset && doorTileset) {
       this.layer = this.map.createLayer(
         "Tile Layer 1",
@@ -92,84 +102,39 @@ export default class GameScene extends Phaser.Scene {
       );
 
       if (this.layer) {
-        // Programmatically duplicate the room vertically
-        // The original room is at rows 10-19 (10 rows total, height of room)
-        const roomStartRow = 10;
-        const roomHeight = 10;
-        const roomWidth = this.map.width;
+        this.layer.setScale(scale);
+        
+        // First, let's just see the original map without any duplication
+        this.layer.setCollisionFromCollisionGroup();
 
-        // Copy the room to fill all rows above and below
-        for (
-          let targetRow = 0;
-          targetRow < this.map.height;
-          targetRow += roomHeight
-        ) {
-          if (targetRow === roomStartRow) continue; // Skip the original room
+        // Calculate world bounds based on original map
+        const worldWidth = this.map.width * tileSize * scale;
+        const worldHeight = this.map.height * tileSize * scale;
 
-          for (
-            let y = 0;
-            y < roomHeight && targetRow + y < this.map.height;
-            y++
-          ) {
-            for (let x = 0; x < roomWidth; x++) {
-              const sourceTile = this.layer.getTileAt(x, roomStartRow + y);
-              if (sourceTile) {
-                this.layer.putTileAt(sourceTile.index, x, targetRow + y);
-              }
-            }
-          }
-        }
-
-        this.layer.setScale(4); // Scale up for pixel art
-
-        // Set collision ONLY for tiles with collision shapes in Tiled editor
-        // From TSX <objectgroup>: 105, 106, 107, 108, 131, 132, 133, 134, 157, 160, 183, 186, 209, 210, 211, 212, 235, 236, 237, 238
-        // Adjusted for GID (TSX ID + 1)
-        const collisionTileIds = [
-          106,
-          107,
-          108,
-          109, // Top row with collision
-          132,
-          133,
-          134,
-          135, // Second row with collision
-          158,
-          161, // Side edges (partial width)
-          184,
-          187, // Side edges (partial width)
-          210,
-          211,
-          212,
-          213, // Bottom first row with collision
-          236,
-          237,
-          238,
-          239, // Bottom second row with collision
-        ];
-        this.layer.setCollision(collisionTileIds);
+        // Set world bounds
+        this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+        
+        // Center the layer on screen
+        const gameWidth = this.cameras.main.width;
+        this.layer.x = (gameWidth - worldWidth) / 2;
       }
     }
-
-    // Set world bounds based on tilemap size (tiles at 16px each, scaled 4x)
-    const worldWidth = this.map.width * 16 * 4;
-    const worldHeight = this.map.height * 16 * 4;
 
     // Create static physics group for collision tiles
     this.wallsGroup = this.physics.add.staticGroup();
 
     if (this.layer) {
-      const tileSize = 16 * 4; // Scaled tile size
+      const scaledTileSize = 16 * 4; // Scaled tile size
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
           const tile = this.layer.getTileAt(x, y);
           if (tile && tile.collides) {
             const wall = this.wallsGroup.create(
-              x * tileSize + tileSize / 2,
-              y * tileSize + tileSize / 2,
+              this.layer.x + x * scaledTileSize + scaledTileSize / 2,
+              y * scaledTileSize + scaledTileSize / 2,
               null
             );
-            wall.setSize(tileSize, tileSize);
+            wall.setSize(scaledTileSize, scaledTileSize);
             wall.setVisible(false);
             wall.refreshBody();
           }
@@ -177,18 +142,16 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create player sprite with physics at center of the map
+    // Create player sprite with physics at center of the screen
     this.player = this.physics.add.sprite(
-      worldWidth / 2,
-      worldHeight / 2,
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2,
       "player"
     );
     this.player.setScale(5);
-    this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-    this.player.setCollideWorldBounds(true);
 
-    // Camera follows player and is constrained to world bounds
-    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+    // Camera follows player
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
     // Add collider between player and walls

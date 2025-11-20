@@ -39,7 +39,9 @@ export class PlayerManager {
       position: { x: 0, y: 0 },
       currentDoor: null,
       lastAnswerTime: null,
-      isConnected: true
+      isConnected: true,
+      doorsCrossed: 0,
+      currentRound: 1
     };
 
     this.players.set(playerId, player);
@@ -171,7 +173,39 @@ export class PlayerManager {
       player.totalCorrectAnswers = 0;
       player.lastAnswerTime = null;
       player.currentDoor = null;
+      player.doorsCrossed = 0;
+      player.currentRound = 1;
     }
+  }
+
+  /**
+   * Record door crossing and advance player to next round
+   */
+  recordDoorCrossing(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (player) {
+      player.doorsCrossed++;
+      player.currentRound++;
+      console.log(`🚪 Player ${player.username} crossed door #${player.doorsCrossed}, now in round ${player.currentRound}`);
+    }
+  }
+
+  /**
+   * Get round statistics for a room
+   */
+  getRoundStats(roomId: string): { playersInCurrentRound: Map<number, number>, totalPlayers: number } {
+    const players = this.getPlayersInRoom(roomId);
+    const playersInCurrentRound = new Map<number, number>();
+    
+    players.forEach(player => {
+      const count = playersInCurrentRound.get(player.currentRound) || 0;
+      playersInCurrentRound.set(player.currentRound, count + 1);
+    });
+
+    return {
+      playersInCurrentRound,
+      totalPlayers: players.length
+    };
   }
 
   /**

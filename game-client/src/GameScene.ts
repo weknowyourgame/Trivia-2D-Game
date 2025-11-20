@@ -21,6 +21,7 @@ export default class GameScene extends Phaser.Scene {
   private socketManager!: SocketManager;
   private remotePlayers: Map<string, RemotePlayer> = new Map();
   private localPlayerId: string | null = null;
+  private localPlayerUsername: string = "Adventurer";
   private lastPositionSent: { x: number; y: number } = { x: 0, y: 0 };
   private lastPositionUpdate: number = 0;
   private positionUpdateThrottle: number = 16; // ~60 updates/sec
@@ -34,6 +35,7 @@ export default class GameScene extends Phaser.Scene {
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
   private layers: Phaser.Tilemaps.TilemapLayer[] = [];
   private doorSprites: Phaser.Physics.Arcade.Sprite[] = [];
+  private doorsCrossed: number = 0;
 
   constructor() {
     super({ key: "GameScene" });
@@ -254,7 +256,6 @@ export default class GameScene extends Phaser.Scene {
             (doorSprite as any).detectionZone = detectionZone;
             (doorSprite as any).playerInZone = false;
             (doorSprite as any).doorOpened = false;
-            (doorSprite as any).playerCrossed = false;
 
             // Add overlap detection with detection zone to trigger door animation
             this.physics.add.overlap(
@@ -394,6 +395,7 @@ export default class GameScene extends Phaser.Scene {
   private setupSocketHandlers(): void {
     this.socketManager.onPlayerInfo = (data) => {
       this.localPlayerId = data.playerId;
+      this.localPlayerUsername = data.username || "Adventurer";
     };
 
     this.socketManager.onExistingPlayers = (data) => {
@@ -605,10 +607,25 @@ export default class GameScene extends Phaser.Scene {
             (doorSprite.body as Phaser.Physics.Arcade.Body).enable = false;
           }
         }
+        // Check if player crossed through the door
+        const crossingZone = (doorSprite as any).crossingZone;
+        const inCrossingZone = crossingZone && this.player && this.physics.overlap(this.player, crossingZone);
+        const wasInCrossingZone = (doorSprite as any).wasInCrossingZone;
+        
+        // If player just entered crossing zone (wasn't there before), they crossed!
+        if (inCrossingZone && !wasInCrossingZone) {
+          this.doorsCrossed++;
+          console.log(`🚪 Player ${this.localPlayerUsername} crossed door #${this.doorsCrossed}`);
+          
+          // Notify backend
+          this.socketManager.sendDoorCrossed();
+        }
+        
+        (doorSprite as any).wasInCrossingZone = inCrossingZone;
+        
         // If player left zone and door was open, close it
-        else if (currentFrame === 5 && !playerInZone && wasInZone) {
+        if (currentFrame === 5 && !playerInZone && wasInZone) {
           (doorSprite as any).doorOpened = false; // Reset flag
-          (doorSprite as any).playerCrossed = false; // Reset crossing flag
           doorSprite.anims.playReverse("doorOpen");
           // Re-enable collision
           if (doorSprite.body) {

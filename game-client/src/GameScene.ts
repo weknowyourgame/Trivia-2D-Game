@@ -21,7 +21,7 @@ export default class GameScene extends Phaser.Scene {
 
   preload(): void {
     // Load tilemap and tilesets
-    this.load.tilemapTiledJSON("tilemap", "/assets/tilemap.json");
+    this.load.tilemapTiledJSON("tilemap", "/assets/newtilemap.json");
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
 
@@ -92,50 +92,68 @@ export default class GameScene extends Phaser.Scene {
       );
 
       if (this.layer) {
+        // Programmatically duplicate the room vertically
+        // The original room is at rows 10-19 (10 rows total, height of room)
+        const roomStartRow = 10;
+        const roomHeight = 10;
+        const roomWidth = this.map.width;
+
+        // Copy the room to fill all rows above and below
+        for (
+          let targetRow = 0;
+          targetRow < this.map.height;
+          targetRow += roomHeight
+        ) {
+          if (targetRow === roomStartRow) continue; // Skip the original room
+
+          for (
+            let y = 0;
+            y < roomHeight && targetRow + y < this.map.height;
+            y++
+          ) {
+            for (let x = 0; x < roomWidth; x++) {
+              const sourceTile = this.layer.getTileAt(x, roomStartRow + y);
+              if (sourceTile) {
+                this.layer.putTileAt(sourceTile.index, x, targetRow + y);
+              }
+            }
+          }
+        }
+
         this.layer.setScale(4); // Scale up for pixel art
 
-        // Set collision for tiles from the TSX collision editor AND additional wall tiles
+        // Set collision ONLY for tiles with collision shapes in Tiled editor
         // From TSX <objectgroup>: 105, 106, 107, 108, 131, 132, 133, 134, 157, 160, 183, 186, 209, 210, 211, 212, 235, 236, 237, 238
-        // Additional walls used in map: 109, 135, 158, 159, 161, 184, 185, 187, 213, 239
+        // Adjusted for GID (TSX ID + 1)
         const collisionTileIds = [
-          105,
           106,
           107,
           108,
-          109, // Top row tiles
-          131,
+          109, // Top row with collision
           132,
           133,
           134,
-          135, // Second row tiles
-          157,
+          135, // Second row with collision
           158,
-          159,
-          160,
-          161, // Third row tiles
-          183,
+          161, // Side edges (partial width)
           184,
-          185,
-          186,
-          187, // Side wall tiles
-          209,
+          187, // Side edges (partial width)
           210,
           211,
           212,
-          213, // Bottom first row
-          235,
+          213, // Bottom first row with collision
           236,
           237,
           238,
-          239, // Bottom second row
+          239, // Bottom second row with collision
         ];
         this.layer.setCollision(collisionTileIds);
       }
     }
 
-    // Set world bounds based on tilemap size (30x30 tiles at 16px each, scaled 4x)
-    const worldWidth = 30 * 16 * 4;
-    const worldHeight = 30 * 16 * 4;
+    // Set world bounds based on tilemap size (tiles at 16px each, scaled 4x)
+    const worldWidth = this.map.width * 16 * 4;
+    const worldHeight = this.map.height * 16 * 4;
 
     // Create static physics group for collision tiles
     this.wallsGroup = this.physics.add.staticGroup();

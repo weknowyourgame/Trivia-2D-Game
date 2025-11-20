@@ -40,6 +40,9 @@ export default class GameScene extends Phaser.Scene {
   private bats: Phaser.Physics.Arcade.Sprite[] = [];
   private lastDamageTime: number = 0;
   private damageImmunityDuration: number = 1000; // 1 second immunity after taking damage
+  private currentRoomIndex: number = 0;
+  private doorLights: Map<number, Phaser.GameObjects.Light[]> = new Map(); // Map room index to lights
+  private roomHeight: number = 0;
 
   constructor() {
     super({ key: "GameScene" });
@@ -50,6 +53,11 @@ export default class GameScene extends Phaser.Scene {
     this.load.on("loaderror", (file: any) => {
       console.error("Error loading file:", file.key, file.url);
     });
+
+    // Load music if not already loaded
+    if (!this.sound.get("ost")) {
+      this.load.audio("ost", "/assets/ost.mp3");
+    }
 
     // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
@@ -133,6 +141,22 @@ export default class GameScene extends Phaser.Scene {
     // Set black background
     this.cameras.main.setBackgroundColor("#000000");
 
+    // Fade in camera
+    this.cameras.main.fadeIn(1000, 0, 0, 0);
+
+    // Ensure music is playing (should continue from HomeScene)
+    if (!this.sound.get("ost")) {
+      const music = this.sound.add("ost", {
+        volume: 0.3,
+        loop: true
+      });
+      music.play();
+    }
+
+    // Enable lighting system
+    this.lights.enable();
+    this.lights.setAmbientColor(0x404040); // Dim gray ambient light
+
     // Create tilemap normally
     this.map = this.make.tilemap({ key: "tilemap" });
 
@@ -158,6 +182,7 @@ export default class GameScene extends Phaser.Scene {
 
       if (this.layer) {
         this.layer.setScale(scale);
+        this.layer.setPipeline('Light2D'); // Enable lighting on tilemap layer
 
         const collisionTileIndexes = [
           106, 107, 108, 109, 132, 133, 134, 135, 158, 161, 184, 187, 210, 211,
@@ -204,6 +229,7 @@ export default class GameScene extends Phaser.Scene {
       "player"
     );
     this.player.setScale(5);
+    this.player.setPipeline('Light2D'); // Enable lighting on player
 
     // Adjust collision box to be smaller near the feet
     // Original sprite is 16x16, scaled 5x = 80x80
@@ -312,6 +338,30 @@ export default class GameScene extends Phaser.Scene {
             );
             doorSprite.setScale(scale); // Scale to fill the 2x2 tile area (32x32 * 4 = 128px)
             doorSprite.setDepth(doorSprite.y); // Use Y position for depth sorting
+            doorSprite.setPipeline('Light2D'); // Enable lighting on door sprites
+
+            // Calculate which room this door belongs to based on world Y position
+            const doorWorldY = (y + 1) * 16 * scale; // Center Y of door in world coords
+            const doorRoomIndex = Math.floor(doorWorldY / (13 * 16 * scale));
+            
+            console.log(`Door at tile (${x},${y}) -> world Y: ${doorWorldY}, room index: ${doorRoomIndex}, room height: ${13 * 16 * scale}`);
+
+            // Add warm yellow light above the door
+            const doorLight = this.lights.addLight(
+              this.layer.x + (x + 1) * 16 * scale, // X position (center of door)
+              (y + 1) * 16 * scale - 20 * scale, // Y position (above door)
+              150 * scale, // Radius
+              0xffdd88, // Warm yellow color
+              0.6 // Intensity
+            );
+
+            // Store light reference by room index AND log it
+            if (!this.doorLights.has(doorRoomIndex)) {
+              this.doorLights.set(doorRoomIndex, []);
+              console.log(`Created new light array for room ${doorRoomIndex}`);
+            }
+            this.doorLights.get(doorRoomIndex)?.push(doorLight);
+            console.log(`Added light to room ${doorRoomIndex}, now has ${this.doorLights.get(doorRoomIndex)?.length} lights`);
 
             // Enable physics body for collision
             doorSprite.body?.setSize(32, 32);
@@ -363,19 +413,26 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
+    // Log final door light mapping
+    console.log("=== Final Door Light Mapping ===");
+    this.doorLights.forEach((lights, roomIndex) => {
+      console.log(`Room ${roomIndex}: ${lights.length} lights`);
+    });
+
     // Spawn slimes randomly in rooms (approximately every 3 rooms)
     // Exclude the bottom room where player spawns
     const slimeScale = 4;
     const mapWorldWidth = this.map.width * 16 * scale;
     const mapWorldHeight = this.map.height * 16 * scale;
-    const roomHeight = 13 * 16 * scale; // Each room is 13 tiles tall
-    const playerRoomIndex = Math.floor(this.player.y / roomHeight);
+    this.roomHeight = 13 * 16 * scale; // Each room is 13 tiles tall
+    const playerRoomIndex = Math.floor(this.player.y / this.roomHeight);
+    this.currentRoomIndex = playerRoomIndex;
     const numSlimes = Math.floor(this.map.height / 13 / 3); // One slime every 3 rooms (13 rows per room)
 
     console.log(`Spawning ${numSlimes} slimes in map (excluding player spawn room ${playerRoomIndex})`);
     console.log(`Map dimensions: ${mapWorldWidth}x${mapWorldHeight}`);
     console.log(`Player position: (${this.player.x}, ${this.player.y})`);
-    console.log(`Player room index: ${playerRoomIndex}, Room height: ${roomHeight}`);
+    console.log(`Player room index: ${playerRoomIndex}, Room height: ${this.roomHeight}`);
     
     // Check if slime texture loaded
     if (!this.textures.exists("slime")) {
@@ -393,7 +450,7 @@ export default class GameScene extends Phaser.Scene {
       do {
         x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
         y = Phaser.Math.Between(100, mapWorldHeight - 100);
-        slimeRoomIndex = Math.floor(y / roomHeight);
+        slimeRoomIndex = Math.floor(y / this.roomHeight);
       } while (slimeRoomIndex === playerRoomIndex); // Keep trying until not in player's room
 
       const slime = this.physics.add.sprite(x, y, "slime", 0);
@@ -476,7 +533,7 @@ export default class GameScene extends Phaser.Scene {
       do {
         x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
         y = Phaser.Math.Between(100, mapWorldHeight - 100);
-        batRoomIndex = Math.floor(y / roomHeight);
+        batRoomIndex = Math.floor(y / this.roomHeight);
       } while (batRoomIndex === playerRoomIndex); // Keep trying until not in player's room
 
       const bat = this.physics.add.sprite(x, y, "bat", 0);
@@ -954,6 +1011,31 @@ export default class GameScene extends Phaser.Scene {
     this.remotePlayers.forEach((remotePlayer) => {
       remotePlayer.update();
     });
+
+    // Check if player changed rooms and turn off lights in rooms behind
+    const newRoomIndex = Math.floor(this.player.y / this.roomHeight);
+    if (newRoomIndex !== this.currentRoomIndex) {
+      console.log(`Player changed rooms: ${this.currentRoomIndex} -> ${newRoomIndex}`);
+      // Player moved to a different room
+      // Since Y=0 is top and player moves UP (decreasing Y), lower room index = ahead
+      // Turn off lights in all rooms behind the player (higher room index = lower on map = behind)
+      this.doorLights.forEach((lights, roomIndex) => {
+        if (roomIndex > newRoomIndex) {
+          // This room is behind the player (higher Y, lower on map), turn off its lights
+          console.log(`Turning OFF lights in room ${roomIndex} (behind player)`);
+          lights.forEach(light => light.setIntensity(0));
+        } else if (roomIndex === newRoomIndex || roomIndex === newRoomIndex - 1 || roomIndex === newRoomIndex + 1) {
+          // Current room and adjacent rooms - keep lights on
+          console.log(`Keeping lights ON in room ${roomIndex}`);
+          lights.forEach(light => light.setIntensity(0.6));
+        } else {
+          // Rooms far ahead - turn off
+          console.log(`Turning OFF lights in room ${roomIndex} (far ahead)`);
+          lights.forEach(light => light.setIntensity(0));
+        }
+      });
+      this.currentRoomIndex = newRoomIndex;
+    }
 
     // Update question UI timer (delta is in milliseconds)
     if (this.isQuestionActive) {

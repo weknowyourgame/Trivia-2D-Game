@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 
 export default class HomeScene extends Phaser.Scene {
+  private music?: Phaser.Sound.BaseSound;
+
   constructor() {
     super({ key: "HomeScene" });
   }
@@ -8,10 +10,23 @@ export default class HomeScene extends Phaser.Scene {
   preload(): void {
     this.load.image("homeBackground", "/assets/Dark_Background.png");
     this.load.image("arabianNightsLogo", "/assets/Arabian_Nights.png");
+    this.load.audio("ost", "/assets/ost.mp3");
   }
 
   create(): void {
     const { width, height } = this.cameras.main;
+
+    // Start background music if not already playing
+    const existingMusic = this.sound.get("ost");
+    if (!existingMusic) {
+      this.music = this.sound.add("ost", {
+        volume: 0.3,
+        loop: true
+      });
+      this.music.play();
+    } else {
+      this.music = existingMusic;
+    }
 
     // Add background
     const bg = this.add.image(width / 2, height / 2, "homeBackground");
@@ -83,8 +98,13 @@ export default class HomeScene extends Phaser.Scene {
     localStorage.setItem("gameMode", mode);
     localStorage.setItem("playerUsername", "Adventurer");
     
-    // Start the game scene
-    this.scene.start("GameScene");
+    // Fade out camera
+    this.cameras.main.fadeOut(1000, 0, 0, 0);
+    
+    // Start the game scene after fade
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start("GameScene");
+    });
   }
 
   private showLeaderboards(): void {

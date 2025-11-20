@@ -22,6 +22,7 @@ export default function Game() {
       scale: {
         mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
+        fullscreenTarget: containerRef.current as HTMLElement,
       },
       render: {
         pixelArt: true,

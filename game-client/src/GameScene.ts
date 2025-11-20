@@ -14,6 +14,7 @@ export default class GameScene extends Phaser.Scene {
   private map: Phaser.Tilemaps.Tilemap | null = null;
   private layer: Phaser.Tilemaps.TilemapLayer | null = null;
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
+  private layers: Phaser.Tilemaps.TilemapLayer[] = [];
 
   constructor() {
     super({ key: "GameScene" });
@@ -23,7 +24,7 @@ export default class GameScene extends Phaser.Scene {
     // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
-    
+
     // Load tilemap after images
     this.load.tilemapTiledJSON("tilemap", "/assets/theMap.json");
 
@@ -74,7 +75,7 @@ export default class GameScene extends Phaser.Scene {
     // Set black background
     this.cameras.main.setBackgroundColor("#000000");
 
-    // Create tilemap
+    // Create tilemap normally
     this.map = this.make.tilemap({ key: "tilemap" });
 
     // Add tilesets
@@ -84,15 +85,9 @@ export default class GameScene extends Phaser.Scene {
     );
     const doorTileset = this.map.addTilesetImage("Door", "Door");
 
-    // Room dimensions
-    const roomStartRow = 4;
-    const roomEndRow = 16;
-    const roomHeight = roomEndRow - roomStartRow + 1;
-    const totalRepeats = 19;
-    const tileSize = 16;
     const scale = 4;
 
-    // Create layer with both tilesets at origin
+    // Just create ONE layer to verify it works
     if (dungeonTileset && doorTileset) {
       this.layer = this.map.createLayer(
         "Tile Layer 1",
@@ -104,17 +99,14 @@ export default class GameScene extends Phaser.Scene {
       if (this.layer) {
         this.layer.setScale(scale);
         
-        // First, let's just see the original map without any duplication
-        this.layer.setCollisionFromCollisionGroup();
+        const collisionTileIndexes = [106, 107, 108, 109, 132, 133, 134, 135, 158, 161, 184, 187, 210, 211, 212, 213, 236, 237, 238, 239];
+        this.layer.setCollision(collisionTileIndexes);
 
-        // Calculate world bounds based on original map
-        const worldWidth = this.map.width * tileSize * scale;
-        const worldHeight = this.map.height * tileSize * scale;
-
-        // Set world bounds
+        const worldWidth = this.map.width * 16 * scale;
+        const worldHeight = this.map.height * 16 * scale;
+        
         this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
         
-        // Center the layer on screen
         const gameWidth = this.cameras.main.width;
         this.layer.x = (gameWidth - worldWidth) / 2;
       }
@@ -124,17 +116,16 @@ export default class GameScene extends Phaser.Scene {
     this.wallsGroup = this.physics.add.staticGroup();
 
     if (this.layer) {
-      const scaledTileSize = 16 * 4; // Scaled tile size
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
           const tile = this.layer.getTileAt(x, y);
           if (tile && tile.collides) {
             const wall = this.wallsGroup.create(
-              this.layer.x + x * scaledTileSize + scaledTileSize / 2,
-              y * scaledTileSize + scaledTileSize / 2,
+              this.layer.x + x * 16 * scale + (16 * scale) / 2,
+              y * 16 * scale + (16 * scale) / 2,
               null
             );
-            wall.setSize(scaledTileSize, scaledTileSize);
+            wall.setSize(16 * scale, 16 * scale);
             wall.setVisible(false);
             wall.refreshBody();
           }
@@ -142,7 +133,7 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create player sprite with physics at center of the screen
+    // Create player sprite
     this.player = this.physics.add.sprite(
       this.cameras.main.width / 2,
       this.cameras.main.height / 2,
@@ -151,7 +142,6 @@ export default class GameScene extends Phaser.Scene {
     this.player.setScale(5);
 
     // Camera follows player
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
     // Add collider between player and walls

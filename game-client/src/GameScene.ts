@@ -16,7 +16,7 @@ export default class GameScene extends Phaser.Scene {
   private speed: number = 200;
   private map: Phaser.Tilemaps.Tilemap | null = null;
   private layer: Phaser.Tilemaps.TilemapLayer | null = null;
-  
+
   // Multiplayer properties
   private socketManager!: SocketManager;
   private remotePlayers: Map<string, RemotePlayer> = new Map();
@@ -24,7 +24,7 @@ export default class GameScene extends Phaser.Scene {
   private lastPositionSent: { x: number; y: number } = { x: 0, y: 0 };
   private lastPositionUpdate: number = 0;
   private positionUpdateThrottle: number = 16; // ~60 updates/sec
-  
+
   // Quiz game properties
   private questionUI!: QuestionUI;
   private correctDoor: string | null = null;
@@ -34,6 +34,8 @@ export default class GameScene extends Phaser.Scene {
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
   private layers: Phaser.Tilemaps.TilemapLayer[] = [];
   private doorSprites: Phaser.Physics.Arcade.Sprite[] = [];
+  private lives: number = 3;
+  private heartSprites: Phaser.GameObjects.Image[] = [];
 
   constructor() {
     super({ key: "GameScene" });
@@ -43,6 +45,12 @@ export default class GameScene extends Phaser.Scene {
     // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
+
+    // Load heart spritesheet to show only first row
+    this.load.spritesheet("heart", "/assets/hearts.png", {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
 
     // Load tilemap after images
     this.load.tilemapTiledJSON("tilemap", "/assets/theNewMap.json");
@@ -178,6 +186,35 @@ export default class GameScene extends Phaser.Scene {
 
     // Camera follows player
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+
+    // Create heart icons in top right corner
+    const heartScale = 3;
+    const heartSize = 16 * heartScale;
+    const heartSpacing = 10;
+    const startX = this.cameras.main.width - heartSize - 20;
+    const startY = 60; // Moved down from 20 to 60
+
+    for (let i = 0; i < 3; i++) {
+      const heart = this.add.image(
+        startX - i * (heartSize + heartSpacing),
+        startY,
+        "heart",
+        0 // Use first frame only
+      );
+      heart.setScale(heartScale);
+      heart.setScrollFactor(0); // Fixed to camera
+      heart.setDepth(1000); // Always on top
+      this.heartSprites.push(heart);
+    }
+
+    // Enable fullscreen on click
+    this.input.once("pointerdown", () => {
+      if (this.scale.isFullscreen) {
+        this.scale.stopFullscreen();
+      } else {
+        this.scale.startFullscreen();
+      }
+    });
 
     // Add collider between player and walls
     if (this.wallsGroup) {
@@ -316,13 +353,13 @@ export default class GameScene extends Phaser.Scene {
     this.socketManager = new SocketManager("http://localhost:3000");
     this.setupSocketHandlers();
     this.socketManager.connect();
-    
+
     // Initialize question UI
     this.questionUI = new QuestionUI(this);
-    
+
     // Create invisible door colliders
     this.createDoorColliders();
-    
+
     // Show welcome message with username
     const username = localStorage.getItem("playerUsername") || "Adventurer";
     const welcomeText = this.add.text(
@@ -340,7 +377,7 @@ export default class GameScene extends Phaser.Scene {
     welcomeText.setOrigin(0.5);
     welcomeText.setScrollFactor(0);
     welcomeText.setDepth(1000);
-    
+
     // Fade out after 3 seconds
     this.time.delayedCall(3000, () => {
       this.tweens.add({
@@ -377,24 +414,24 @@ export default class GameScene extends Phaser.Scene {
     this.socketManager.onPlayerLeft = (data) => {
       this.removeRemotePlayer(data.playerId);
     };
-    
+
     // Game event handlers
     this.socketManager.onGameCountdown = (data) => {
       console.log("⏱️ Countdown:", data.message);
     };
-    
+
     this.socketManager.onGameStart = (data) => {
       console.log("🎮 Game started!", data);
     };
-    
+
     this.socketManager.onQuestion = (data: QuestionData) => {
       this.handleQuestion(data);
     };
-    
+
     this.socketManager.onAnswerReveal = (data) => {
       this.handleAnswerReveal(data);
     };
-    
+
     this.socketManager.onGameOver = (data) => {
       console.log("Game over!", data);
       this.questionUI.hide();
@@ -428,7 +465,7 @@ export default class GameScene extends Phaser.Scene {
       this.remotePlayers.delete(playerId);
     }
   }
-  
+
   private createDoorColliders(): void {
     if (!this.player) return;
 
@@ -436,34 +473,59 @@ export default class GameScene extends Phaser.Scene {
     // Looking at the tilemap, doors are at tiles 311, 312, 323, 324 (from Door tileset)
     // They appear at row 12-13, columns 16-17, 20-21, 24-25, 26-27
     const doorPositions = [
-      { id: "A", x: 16 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // First door
-      { id: "B", x: 20 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Second door
-      { id: "C", x: 24 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Third door
-      { id: "D", x: 26 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Fourth door
+      {
+        id: "A",
+        x: 16 * 16 * 4,
+        y: 12.5 * 16 * 4,
+        width: 2 * 16 * 4,
+        height: 2 * 16 * 4,
+      }, // First door
+      {
+        id: "B",
+        x: 20 * 16 * 4,
+        y: 12.5 * 16 * 4,
+        width: 2 * 16 * 4,
+        height: 2 * 16 * 4,
+      }, // Second door
+      {
+        id: "C",
+        x: 24 * 16 * 4,
+        y: 12.5 * 16 * 4,
+        width: 2 * 16 * 4,
+        height: 2 * 16 * 4,
+      }, // Third door
+      {
+        id: "D",
+        x: 26 * 16 * 4,
+        y: 12.5 * 16 * 4,
+        width: 2 * 16 * 4,
+        height: 2 * 16 * 4,
+      }, // Fourth door
     ];
 
     const player = this.player;
 
     doorPositions.forEach((doorPos) => {
       // Create invisible sprite for collision
-      const doorCollider = this.physics.add.sprite(
-        doorPos.x,
-        doorPos.y,
-        ""
-      );
+      const doorCollider = this.physics.add.sprite(doorPos.x, doorPos.y, "");
       doorCollider.setDisplaySize(doorPos.width, doorPos.height);
       doorCollider.setVisible(false); // Set to true to debug door positions
       doorCollider.setImmovable(true);
       doorCollider.body?.setSize(doorPos.width, doorPos.height);
-      
+
       // Debug: Add a text label above each door
-      const label = this.add.text(doorPos.x, doorPos.y - 40, `Door ${doorPos.id}`, {
-        fontSize: "32px",
-        color: "#ffff00",
-        fontFamily: "Arial",
-        stroke: "#000000",
-        strokeThickness: 4,
-      });
+      const label = this.add.text(
+        doorPos.x,
+        doorPos.y - 40,
+        `Door ${doorPos.id}`,
+        {
+          fontSize: "32px",
+          color: "#ffff00",
+          fontFamily: "Arial",
+          stroke: "#000000",
+          strokeThickness: 4,
+        }
+      );
       label.setOrigin(0.5);
 
       this.doorColliders.set(doorPos.id, doorCollider);
@@ -476,54 +538,58 @@ export default class GameScene extends Phaser.Scene {
 
     console.log("🚪 Door colliders created:", this.doorColliders.size);
   }
-  
+
   private handleQuestion(data: QuestionData): void {
     console.log("Question received:", data);
     this.isQuestionActive = true;
     this.correctDoor = null;
-    
+
     // Show question UI
     this.questionUI.show(data);
-    
+
     // Make all doors impassable during question phase
     this.setAllDoorsImpassable();
   }
-  
+
   private handleAnswerReveal(data: any): void {
     this.correctDoor = data.correctAnswer;
     this.isQuestionActive = false;
-    
+
     // Hide question UI
     this.questionUI.hide();
-    
+
     // Make only the correct door passable
     if (this.correctDoor) {
       this.setDoorPassability(this.correctDoor, true);
-      console.log(`✅ Correct answer: Door ${this.correctDoor} is now passable`);
+      console.log(
+        `✅ Correct answer: Door ${this.correctDoor} is now passable`
+      );
     }
   }
-  
+
   private setAllDoorsImpassable(): void {
     console.log("🚪 Blocking all doors");
     this.doorColliderObjects.forEach((collider) => {
       collider.active = true;
     });
   }
-  
+
   private setAllDoorsPassable(): void {
     console.log("🚪 Opening all doors");
     this.doorColliderObjects.forEach((collider) => {
       collider.active = false;
     });
   }
-  
+
   private setDoorPassability(doorLetter: string, passable: boolean): void {
-    console.log(`🚪 Setting door ${doorLetter} to ${passable ? "passable" : "blocked"}`);
-    
+    console.log(
+      `🚪 Setting door ${doorLetter} to ${passable ? "passable" : "blocked"}`
+    );
+
     this.doorColliders.forEach((_sprite, id) => {
       const colliderIndex = Array.from(this.doorColliders.keys()).indexOf(id);
       const collider = this.doorColliderObjects[colliderIndex];
-      
+
       if (id === doorLetter) {
         // This is the correct door - make it passable or not
         collider.active = !passable;
@@ -644,7 +710,7 @@ export default class GameScene extends Phaser.Scene {
     this.remotePlayers.forEach((remotePlayer) => {
       remotePlayer.update();
     });
-    
+
     // Update question UI timer (delta is in milliseconds)
     if (this.isQuestionActive) {
       this.questionUI.update(_delta);

@@ -14,7 +14,9 @@ export default function Game() {
       scene: GameScene,
       physics: {
         default: "arcade",
-        arcade: { debug: true },
+        arcade: {
+          debug: false, // disabled debug overlay
+        },
       },
       scale: {
         mode: Phaser.Scale.RESIZE,

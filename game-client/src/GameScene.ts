@@ -98,15 +98,18 @@ export default class GameScene extends Phaser.Scene {
 
       if (this.layer) {
         this.layer.setScale(scale);
-        
-        const collisionTileIndexes = [106, 107, 108, 109, 132, 133, 134, 135, 158, 161, 184, 187, 210, 211, 212, 213, 236, 237, 238, 239];
+
+        const collisionTileIndexes = [
+          106, 107, 108, 109, 132, 133, 134, 135, 158, 161, 184, 187, 210, 211,
+          212, 213, 236, 237, 238, 239,
+        ];
         this.layer.setCollision(collisionTileIndexes);
 
         const worldWidth = this.map.width * 16 * scale;
         const worldHeight = this.map.height * 16 * scale;
-        
+
         this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-        
+
         const gameWidth = this.cameras.main.width;
         this.layer.x = (gameWidth - worldWidth) / 2;
       }
@@ -133,10 +136,10 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create player sprite
+    // Create player sprite (spawn a bit below center)
     this.player = this.physics.add.sprite(
       this.cameras.main.width / 2,
-      this.cameras.main.height / 2,
+      this.cameras.main.height / 2 + 100,
       "player"
     );
     this.player.setScale(5);

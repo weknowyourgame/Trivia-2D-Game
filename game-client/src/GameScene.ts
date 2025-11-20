@@ -34,6 +34,7 @@ export default class GameScene extends Phaser.Scene {
   private doorColliderObjects: Phaser.Physics.Arcade.Collider[] = [];
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
   private layers: Phaser.Tilemaps.TilemapLayer[] = [];
+  private layer2: Phaser.Tilemaps.TilemapLayer | null = null;
   private doorSprites: Phaser.Physics.Arcade.Sprite[] = [];
   private lives: number = 3;
   private heartSprites: Phaser.GameObjects.Image[] = [];
@@ -212,40 +213,151 @@ export default class GameScene extends Phaser.Scene {
       }
 
       // Layer 2 - foreground objects
-      const layer2 = this.map.createLayer(
+      this.layer2 = this.map.createLayer(
         "Tile Layer 2",
         [dungeonTileset, doorTileset, desertTileset],
         0,
         0
       );
 
-      if (layer2 && this.layer) {
-        layer2.setScale(scale);
-        layer2.setPipeline("Light2D"); // Enable lighting on layer 2
-        layer2.x = this.layer.x; // Align with layer 1
-        // No collision on layer 2 since it's decorative
+      if (this.layer2 && this.layer) {
+        this.layer2.setScale(scale);
+        this.layer2.setPipeline("Light2D"); // Enable lighting on layer 2
+        this.layer2.x = this.layer.x; // Align with layer 1
+        
+        // Set collision on desert object tiles in layer 2
+        const desertCollisionTiles = [
+          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379
+        ];
+        this.layer2.setCollision(desertCollisionTiles);
+        console.log("Set collision on desert tiles in Layer 2:", desertCollisionTiles);
       }
     }
 
     // Create static physics group for collision tiles
     this.wallsGroup = this.physics.add.staticGroup();
 
+    console.log("Setting up collisions...");
+    
+    // Check Layer 1 for collisions
     if (this.layer) {
+      console.log(`Checking Layer 1: ${this.map.width}x${this.map.height} tiles`);
+      let layer1Collisions = 0;
+      let desertObjectsFound = 0;
+      
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
-          const tile = this.layer.getTileAt(x, y);
+          const tile: Phaser.Tilemaps.Tile | null = this.layer.getTileAt(x, y);
           if (tile && tile.collides) {
-            const wall = this.wallsGroup.create(
-              this.layer.x + x * 16 * scale + (16 * scale) / 2,
-              y * 16 * scale + (16 * scale) / 2,
-              ""
-            );
-            wall.setSize(16 * scale, 16 * scale);
-            wall.setVisible(false);
-            wall.refreshBody();
+            layer1Collisions++;
+            const tileWorldX = this.layer.x + x * 16 * scale;
+            const tileWorldY = y * 16 * scale;
+            
+            // Check if this is a desert object tile with custom collision
+            const tileId = tile.index;
+            const desertCollisionShapes: { [key: number]: { x: number; y: number; width: number; height: number }[] } = {
+              329: [{ x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 }], // tile 4
+              330: [{ x: 3.00917, y: 4, width: 12, height: 8.97248 }], // tile 5
+              333: [{ x: 1.69725, y: -0.0366972, width: 13.5321, height: 16 }], // tile 8
+              334: [{ x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 }, { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 }], // tile 9
+              335: [{ x: 0, y: 2, width: 10, height: 14 }], // tile 10
+              345: [{ x: 4.00917, y: 0, width: 11.9908, height: 12.578 }], // tile 20
+              346: [{ x: 0, y: 0, width: 12.5688, height: 14.422 }], // tile 21
+              365: [{ x: 1, y: 0, width: 14, height: 16 }], // tile 40
+              366: [{ x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 }], // tile 41
+              367: [{ x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 }], // tile 42
+              368: [{ x: 0, y: 2.42202, width: 13.3211, height: 13.578 }], // tile 43 (using second object)
+              378: [{ x: 5.3945, y: 0, width: 10.6055, height: 16 }], // tile 53
+              379: [{ x: 0, y: 0, width: 8.53211, height: 15.7798 }], // tile 54
+            };
+            
+            if (desertCollisionShapes[tileId] && this.wallsGroup) {
+              desertObjectsFound++;
+              console.log(`Found desert object tile ${tileId} at (${x}, ${y})`);
+              // Create custom collision bodies for desert objects
+              desertCollisionShapes[tileId].forEach(shape => {
+                if (this.wallsGroup) {
+                  const wall = this.wallsGroup.create(
+                    tileWorldX + (shape.x + shape.width / 2) * scale,
+                    tileWorldY + (shape.y + shape.height / 2) * scale,
+                    ""
+                  );
+                  wall.setSize(shape.width * scale, shape.height * scale);
+                  wall.setVisible(false);
+                  wall.refreshBody();
+                }
+              });
+            } else if (this.wallsGroup) {
+              // Regular tile collision (full 16x16)
+              const wall = this.wallsGroup.create(
+                tileWorldX + (16 * scale) / 2,
+                tileWorldY + (16 * scale) / 2,
+                ""
+              );
+              wall.setSize(16 * scale, 16 * scale);
+              wall.setVisible(false);
+              wall.refreshBody();
+            }
           }
         }
       }
+      console.log(`Layer 1: Found ${layer1Collisions} collision tiles, ${desertObjectsFound} desert objects`);
+    }
+    
+    // Check Layer 2 for desert object collisions
+    if (this.layer2) {
+      console.log(`Checking Layer 2: ${this.map.width}x${this.map.height} tiles`);
+      let layer2Collisions = 0;
+      let desertObjectsFound = 0;
+      
+      for (let y = 0; y < this.map.height; y++) {
+        for (let x = 0; x < this.map.width; x++) {
+          const tile: Phaser.Tilemaps.Tile | null = this.layer2.getTileAt(x, y);
+          if (tile && tile.collides) {
+            layer2Collisions++;
+            const tileWorldX = this.layer2.x + x * 16 * scale;
+            const tileWorldY = y * 16 * scale;
+            
+            // Check if this is a desert object tile with custom collision
+            const tileId = tile.index;
+            const desertCollisionShapes: { [key: number]: { x: number; y: number; width: number; height: number }[] } = {
+              329: [{ x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 }], // tile 4
+              330: [{ x: 3.00917, y: 4, width: 12, height: 8.97248 }], // tile 5
+              333: [{ x: 1.69725, y: -0.0366972, width: 13.5321, height: 16 }], // tile 8
+              334: [{ x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 }, { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 }], // tile 9
+              335: [{ x: 0, y: 2, width: 10, height: 14 }], // tile 10
+              345: [{ x: 4.00917, y: 0, width: 11.9908, height: 12.578 }], // tile 20
+              346: [{ x: 0, y: 0, width: 12.5688, height: 14.422 }], // tile 21
+              365: [{ x: 1, y: 0, width: 14, height: 16 }], // tile 40
+              366: [{ x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 }], // tile 41
+              367: [{ x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 }], // tile 42
+              368: [{ x: 0, y: 2.42202, width: 13.3211, height: 13.578 }], // tile 43 (using second object)
+              378: [{ x: 5.3945, y: 0, width: 10.6055, height: 16 }], // tile 53
+              379: [{ x: 0, y: 0, width: 8.53211, height: 15.7798 }], // tile 54
+            };
+            
+            if (desertCollisionShapes[tileId] && this.wallsGroup) {
+              desertObjectsFound++;
+              console.log(`Found desert object tile ${tileId} at (${x}, ${y}) in Layer 2`);
+              // Create custom collision bodies for desert objects
+              desertCollisionShapes[tileId].forEach(shape => {
+                if (this.wallsGroup) {
+                  const wall = this.wallsGroup.create(
+                    tileWorldX + (shape.x + shape.width / 2) * scale,
+                    tileWorldY + (shape.y + shape.height / 2) * scale,
+                    ""
+                  );
+                  wall.setSize(shape.width * scale, shape.height * scale);
+                  wall.setVisible(false);
+                  wall.refreshBody();
+                  console.log(`  Created collision body at (${wall.x}, ${wall.y}) size ${wall.displayWidth}x${wall.displayHeight}`);
+                }
+              });
+            }
+          }
+        }
+      }
+      console.log(`Layer 2: Found ${layer2Collisions} collision tiles, ${desertObjectsFound} desert objects`);
     }
 
     // Create player sprite (spawn at bottom of the map)

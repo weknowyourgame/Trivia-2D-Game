@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { SocketManager, PlayerData } from "./SocketManager";
 import { RemotePlayer } from "./RemotePlayer";
+import { QuestionUI, QuestionData } from "./QuestionUI";
 
 interface CursorKeys {
   up: Phaser.Input.Keyboard.Key;
@@ -23,6 +24,13 @@ export default class GameScene extends Phaser.Scene {
   private lastPositionSent: { x: number; y: number } = { x: 0, y: 0 };
   private lastPositionUpdate: number = 0;
   private positionUpdateThrottle: number = 16; // ~60 updates/sec
+  
+  // Quiz game properties
+  private questionUI!: QuestionUI;
+  private correctDoor: string | null = null;
+  private isQuestionActive: boolean = false;
+  private doorColliders: Map<string, Phaser.Physics.Arcade.Sprite> = new Map();
+  private doorColliderObjects: Phaser.Physics.Arcade.Collider[] = [];
 
   constructor() {
     super({ key: "GameScene" });
@@ -170,6 +178,12 @@ export default class GameScene extends Phaser.Scene {
     this.socketManager = new SocketManager("http://localhost:3000");
     this.setupSocketHandlers();
     this.socketManager.connect();
+    
+    // Initialize question UI
+    this.questionUI = new QuestionUI(this);
+    
+    // Create invisible door colliders
+    this.createDoorColliders();
   }
 
   private setupSocketHandlers(): void {
@@ -197,6 +211,31 @@ export default class GameScene extends Phaser.Scene {
     this.socketManager.onPlayerLeft = (data) => {
       this.removeRemotePlayer(data.playerId);
     };
+    
+    // Game event handlers
+    this.socketManager.onGameCountdown = (data) => {
+      console.log("⏱️ Countdown:", data.message);
+    };
+    
+    this.socketManager.onGameStart = (data) => {
+      console.log("🎮 Game started!", data);
+    };
+    
+    this.socketManager.onQuestion = (data: QuestionData) => {
+      this.handleQuestion(data);
+    };
+    
+    this.socketManager.onAnswerReveal = (data) => {
+      this.handleAnswerReveal(data);
+    };
+    
+    this.socketManager.onGameOver = (data) => {
+      console.log("Game over!", data);
+      this.questionUI.hide();
+      this.isQuestionActive = false;
+      this.correctDoor = null;
+      this.setAllDoorsPassable();
+    };
   }
 
   private addRemotePlayer(data: PlayerData): void {
@@ -222,6 +261,111 @@ export default class GameScene extends Phaser.Scene {
       remotePlayer.destroy();
       this.remotePlayers.delete(playerId);
     }
+  }
+  
+  private createDoorColliders(): void {
+    if (!this.player) return;
+
+    // Door positions in the tilemap (scaled by 4)
+    // Looking at the tilemap, doors are at tiles 311, 312, 323, 324 (from Door tileset)
+    // They appear at row 12-13, columns 16-17, 20-21, 24-25, 26-27
+    const doorPositions = [
+      { id: "A", x: 16 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // First door
+      { id: "B", x: 20 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Second door
+      { id: "C", x: 24 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Third door
+      { id: "D", x: 26 * 16 * 4, y: 12.5 * 16 * 4, width: 2 * 16 * 4, height: 2 * 16 * 4 }, // Fourth door
+    ];
+
+    const player = this.player;
+
+    doorPositions.forEach((doorPos) => {
+      // Create invisible sprite for collision
+      const doorCollider = this.physics.add.sprite(
+        doorPos.x,
+        doorPos.y,
+        ""
+      );
+      doorCollider.setDisplaySize(doorPos.width, doorPos.height);
+      doorCollider.setVisible(false); // Set to true to debug door positions
+      doorCollider.setImmovable(true);
+      doorCollider.body?.setSize(doorPos.width, doorPos.height);
+      
+      // Debug: Add a text label above each door
+      const label = this.add.text(doorPos.x, doorPos.y - 40, `Door ${doorPos.id}`, {
+        fontSize: "32px",
+        color: "#ffff00",
+        fontFamily: "Arial",
+        stroke: "#000000",
+        strokeThickness: 4,
+      });
+      label.setOrigin(0.5);
+
+      this.doorColliders.set(doorPos.id, doorCollider);
+
+      // Create collider with player (initially disabled)
+      const collider = this.physics.add.collider(player, doorCollider);
+      collider.active = false; // Start with doors passable
+      this.doorColliderObjects.push(collider);
+    });
+
+    console.log("🚪 Door colliders created:", this.doorColliders.size);
+  }
+  
+  private handleQuestion(data: QuestionData): void {
+    console.log("Question received:", data);
+    this.isQuestionActive = true;
+    this.correctDoor = null;
+    
+    // Show question UI
+    this.questionUI.show(data);
+    
+    // Make all doors impassable during question phase
+    this.setAllDoorsImpassable();
+  }
+  
+  private handleAnswerReveal(data: any): void {
+    this.correctDoor = data.correctAnswer;
+    this.isQuestionActive = false;
+    
+    // Hide question UI
+    this.questionUI.hide();
+    
+    // Make only the correct door passable
+    if (this.correctDoor) {
+      this.setDoorPassability(this.correctDoor, true);
+      console.log(`✅ Correct answer: Door ${this.correctDoor} is now passable`);
+    }
+  }
+  
+  private setAllDoorsImpassable(): void {
+    console.log("🚪 Blocking all doors");
+    this.doorColliderObjects.forEach((collider) => {
+      collider.active = true;
+    });
+  }
+  
+  private setAllDoorsPassable(): void {
+    console.log("🚪 Opening all doors");
+    this.doorColliderObjects.forEach((collider) => {
+      collider.active = false;
+    });
+  }
+  
+  private setDoorPassability(doorLetter: string, passable: boolean): void {
+    console.log(`🚪 Setting door ${doorLetter} to ${passable ? "passable" : "blocked"}`);
+    
+    this.doorColliders.forEach((_sprite, id) => {
+      const colliderIndex = Array.from(this.doorColliders.keys()).indexOf(id);
+      const collider = this.doorColliderObjects[colliderIndex];
+      
+      if (id === doorLetter) {
+        // This is the correct door - make it passable or not
+        collider.active = !passable;
+      } else {
+        // Wrong doors - keep blocked
+        collider.active = true;
+      }
+    });
   }
 
   update(time: number, _delta: number): void {
@@ -288,5 +432,10 @@ export default class GameScene extends Phaser.Scene {
     this.remotePlayers.forEach((remotePlayer) => {
       remotePlayer.update();
     });
+    
+    // Update question UI timer (delta is in milliseconds)
+    if (this.isQuestionActive) {
+      this.questionUI.update(_delta);
+    }
   }
 }

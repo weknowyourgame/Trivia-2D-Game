@@ -27,6 +27,13 @@ export class SocketManager {
   public onPlayerMoved?: (data: PlayerMovedData) => void;
   public onPlayerLeft?: (data: { playerId: string; username: string }) => void;
   
+  // Game event callbacks
+  public onGameStart?: (data: any) => void;
+  public onGameCountdown?: (data: any) => void;
+  public onQuestion?: (data: any) => void;
+  public onAnswerReveal?: (data: any) => void;
+  public onGameOver?: (data: any) => void;
+  
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl;
   }
@@ -57,6 +64,27 @@ export class SocketManager {
     
     this.socket.on('playerLeft', (data) => {
       this.onPlayerLeft?.(data);
+    });
+    
+    // Game events
+    this.socket.on('gameCountdown', (data) => {
+      this.onGameCountdown?.(data);
+    });
+    
+    this.socket.on('gameStarted', (data) => {
+      this.onGameStart?.(data);
+    });
+    
+    this.socket.on('newQuestion', (data) => {
+      this.onQuestion?.(data);
+    });
+    
+    this.socket.on('answerRevealed', (data) => {
+      this.onAnswerReveal?.(data);
+    });
+    
+    this.socket.on('gameOver', (data) => {
+      this.onGameOver?.(data);
     });
   }
   

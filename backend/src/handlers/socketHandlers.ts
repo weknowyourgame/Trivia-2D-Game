@@ -97,6 +97,10 @@ export class SocketHandlers {
       this.handleStartGameRequest(socket);
     });
 
+    socket.on('doorCrossed', () => {
+      this.handleDoorCrossed(socket);
+    });
+
     socket.on('disconnect', () => {
       this.handleDisconnect(socket);
     });
@@ -141,6 +145,36 @@ export class SocketHandlers {
     if (!player) return;
 
     this.startGame(player.roomId);
+  }
+
+  /**
+   * Handle player crossing a door
+   */
+  private handleDoorCrossed(socket: Socket): void {
+    console.log("handling door crossing");
+    const player = this.playerManager.getPlayerBySocket(socket.id);
+    if (!player) return;
+
+    // Record the door crossing
+    this.playerManager.recordDoorCrossing(player.playerId);
+
+    // Get round statistics
+    const stats = this.playerManager.getRoundStats(player.roomId);
+    
+    // Broadcast to room
+    this.io.to(player.roomId).emit('playerCrossedDoor', {
+      playerId: player.playerId,
+      username: player.username,
+      doorsCrossed: player.doorsCrossed,
+      currentRound: player.currentRound,
+      roundStats: {
+        playersPerRound: Array.from(stats.playersInCurrentRound.entries()).map(([round, count]) => ({
+          round,
+          playerCount: count
+        })),
+        totalPlayers: stats.totalPlayers
+      }
+    });
   }
 
   /**

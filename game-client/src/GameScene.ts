@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import { SocketManager, PlayerData } from "./SocketManager";
+import { RemotePlayer } from "./RemotePlayer";
 
 interface CursorKeys {
   up: Phaser.Input.Keyboard.Key;
@@ -13,6 +15,14 @@ export default class GameScene extends Phaser.Scene {
   private speed: number = 200;
   private map: Phaser.Tilemaps.Tilemap | null = null;
   private layer: Phaser.Tilemaps.TilemapLayer | null = null;
+  
+  // Multiplayer properties
+  private socketManager!: SocketManager;
+  private remotePlayers: Map<string, RemotePlayer> = new Map();
+  private localPlayerId: string | null = null;
+  private lastPositionSent: { x: number; y: number } = { x: 0, y: 0 };
+  private lastPositionUpdate: number = 0;
+  private positionUpdateThrottle: number = 16; // ~60 updates/sec
 
   constructor() {
     super({ key: "GameScene" });
@@ -155,9 +165,66 @@ export default class GameScene extends Phaser.Scene {
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     }) as CursorKeys;
+
+    // Initialize multiplayer socket connection
+    this.socketManager = new SocketManager("http://localhost:3000");
+    this.setupSocketHandlers();
+    this.socketManager.connect();
   }
 
-  update(_time: number, _delta: number): void {
+  private setupSocketHandlers(): void {
+    this.socketManager.onPlayerInfo = (data) => {
+      this.localPlayerId = data.playerId;
+    };
+
+    this.socketManager.onExistingPlayers = (data) => {
+      data.players.forEach((playerData: PlayerData) => {
+        this.addRemotePlayer(playerData);
+      });
+    };
+
+    this.socketManager.onPlayerJoined = (data) => {
+      this.addRemotePlayer(data);
+    };
+
+    this.socketManager.onPlayerMoved = (data) => {
+      const remotePlayer = this.remotePlayers.get(data.playerId);
+      if (remotePlayer) {
+        remotePlayer.updatePosition(data.position, data.timestamp);
+      }
+    };
+
+    this.socketManager.onPlayerLeft = (data) => {
+      this.removeRemotePlayer(data.playerId);
+    };
+  }
+
+  private addRemotePlayer(data: PlayerData): void {
+    // Prevent duplicate remote players
+    if (this.remotePlayers.has(data.playerId)) {
+      return;
+    }
+
+    const remotePlayer = new RemotePlayer(
+      this,
+      data.playerId,
+      data.username,
+      data.character,
+      data.position
+    );
+
+    this.remotePlayers.set(data.playerId, remotePlayer);
+  }
+
+  private removeRemotePlayer(playerId: string): void {
+    const remotePlayer = this.remotePlayers.get(playerId);
+    if (remotePlayer) {
+      remotePlayer.destroy();
+      this.remotePlayers.delete(playerId);
+    }
+  }
+
+  update(time: number, _delta: number): void {
     if (!this.player || !this.cursors) return;
 
     let velocityX = 0;
@@ -198,5 +265,28 @@ export default class GameScene extends Phaser.Scene {
     } else {
       this.player.anims.pause();
     }
+
+    // Send position updates (throttled to ~60/sec)
+    if (time - this.lastPositionUpdate > this.positionUpdateThrottle) {
+      const currentPos = { x: this.player.x, y: this.player.y };
+      const distance = Phaser.Math.Distance.Between(
+        currentPos.x,
+        currentPos.y,
+        this.lastPositionSent.x,
+        this.lastPositionSent.y
+      );
+
+      // Only send if moved significantly (> 5 pixels) or enough time passed (> 100ms)
+      if (distance > 5 || time - this.lastPositionUpdate > 100) {
+        this.socketManager.sendMovement(currentPos, null);
+        this.lastPositionSent = currentPos;
+        this.lastPositionUpdate = time;
+      }
+    }
+
+    // Update all remote players (interpolation and animation)
+    this.remotePlayers.forEach((remotePlayer) => {
+      remotePlayer.update();
+    });
   }
 }

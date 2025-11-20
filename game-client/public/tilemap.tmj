@@ -52,7 +52,7 @@
  "tilesets":[
         {
          "firstgid":1,
-         "source":"..\/..\/..\/Fortnite\/Tileset_Dungeon.tsx"
+         "source":"Tileset_Dungeon.tsx"
         }, 
         {
          "firstgid":287,

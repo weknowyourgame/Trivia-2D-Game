@@ -229,4 +229,9 @@
    <property name="col" type="bool" value="false"/>
   </properties>
  </tile>
+ <tile id="285">
+  <properties>
+   <property name="col" type="bool" value="false"/>
+  </properties>
+ </tile>
 </tileset>

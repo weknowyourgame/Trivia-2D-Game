@@ -13,6 +13,7 @@ export default class GameScene extends Phaser.Scene {
   private speed: number = 200;
   private map: Phaser.Tilemaps.Tilemap | null = null;
   private layer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
 
   constructor() {
     super({ key: "GameScene" });
@@ -93,14 +94,70 @@ export default class GameScene extends Phaser.Scene {
       if (this.layer) {
         this.layer.setScale(4); // Scale up for pixel art
 
-        // Set collision for tiles with col property
-        this.layer.setCollisionByProperty({ col: true });
+        // Set collision for tiles from the TSX collision editor AND additional wall tiles
+        // From TSX <objectgroup>: 105, 106, 107, 108, 131, 132, 133, 134, 157, 160, 183, 186, 209, 210, 211, 212, 235, 236, 237, 238
+        // Additional walls used in map: 109, 135, 158, 159, 161, 184, 185, 187, 213, 239
+        const collisionTileIds = [
+          105,
+          106,
+          107,
+          108,
+          109, // Top row tiles
+          131,
+          132,
+          133,
+          134,
+          135, // Second row tiles
+          157,
+          158,
+          159,
+          160,
+          161, // Third row tiles
+          183,
+          184,
+          185,
+          186,
+          187, // Side wall tiles
+          209,
+          210,
+          211,
+          212,
+          213, // Bottom first row
+          235,
+          236,
+          237,
+          238,
+          239, // Bottom second row
+        ];
+        this.layer.setCollision(collisionTileIds);
       }
     }
 
     // Set world bounds based on tilemap size (30x30 tiles at 16px each, scaled 4x)
     const worldWidth = 30 * 16 * 4;
     const worldHeight = 30 * 16 * 4;
+
+    // Create static physics group for collision tiles
+    this.wallsGroup = this.physics.add.staticGroup();
+
+    if (this.layer) {
+      const tileSize = 16 * 4; // Scaled tile size
+      for (let y = 0; y < this.map.height; y++) {
+        for (let x = 0; x < this.map.width; x++) {
+          const tile = this.layer.getTileAt(x, y);
+          if (tile && tile.collides) {
+            const wall = this.wallsGroup.create(
+              x * tileSize + tileSize / 2,
+              y * tileSize + tileSize / 2,
+              null
+            );
+            wall.setSize(tileSize, tileSize);
+            wall.setVisible(false);
+            wall.refreshBody();
+          }
+        }
+      }
+    }
 
     // Create player sprite with physics at center of the map
     this.player = this.physics.add.sprite(
@@ -116,9 +173,9 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-    // Enable collision between player and tilemap layer
-    if (this.layer) {
-      this.physics.add.collider(this.player, this.layer);
+    // Add collider between player and walls
+    if (this.wallsGroup) {
+      this.physics.add.collider(this.player, this.wallsGroup);
     }
 
     // Create animations for 8 directions

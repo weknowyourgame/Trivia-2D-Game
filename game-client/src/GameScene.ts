@@ -183,7 +183,7 @@ export default class GameScene extends Phaser.Scene {
     this.questionUI = new QuestionUI(this);
     
     // Create invisible door colliders
-    this.createDoorColliders();
+    // this.createDoorColliders();
   }
 
   private setupSocketHandlers(): void {

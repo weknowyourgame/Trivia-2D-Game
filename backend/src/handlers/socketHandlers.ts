@@ -151,12 +151,18 @@ export class SocketHandlers {
    * Handle player crossing a door
    */
   private handleDoorCrossed(socket: Socket): void {
-    console.log("handling door crossing");
     const player = this.playerManager.getPlayerBySocket(socket.id);
     if (!player) return;
 
-    // Record the door crossing
+    // Record the door crossing in player manager
     this.playerManager.recordDoorCrossing(player.playerId);
+
+    // Get the game state
+    const game = this.gameManager.getGameByRoom(player.roomId);
+    if (!game) return;
+
+    // Record crossing in game manager
+    this.gameManager.recordPlayerCrossing(game.gameId, player.playerId);
 
     // Get round statistics
     const stats = this.playerManager.getRoundStats(player.roomId);
@@ -173,8 +179,25 @@ export class SocketHandlers {
           playerCount: count
         })),
         totalPlayers: stats.totalPlayers
-      }
+      },
+      playersCrossed: game.playersCrossedThisRound.size,
+      requiredPlayers: game.requiredPlayersForNextRound
     });
+
+    // Check if enough players have crossed to proceed
+    if (this.gameManager.canProceedToNextRound(game.gameId)) {
+      console.log(`✅ Enough players crossed! Proceeding to next round...`);
+      
+      // Clear any existing timer
+      this.gameManager.clearGameTimer(game.gameId);
+      
+      // Prepare for next round
+      this.gameManager.prepareNextRound(game.gameId);
+      
+      // Move to answer review phase
+      this.gameManager.startAnswerReview(game.gameId);
+      this.startGameLoop(game.gameId);
+    }
   }
 
   /**
@@ -380,8 +403,19 @@ export class SocketHandlers {
 
     this.io.to(game.roomId).emit('newQuestion', questionPayload);
 
-    // After time limit or all answered, reveal answer
+    // After time limit, eliminate slow players and reveal answer
     const timer = setTimeout(() => {
+      // Eliminate players who didn't cross in time
+      const eliminated = this.gameManager.eliminateSlowPlayers(gameId);
+      
+      if (eliminated.length > 0) {
+        this.io.to(game.roomId).emit('playersEliminated', {
+          eliminatedPlayers: eliminated,
+          remainingRequired: game.requiredPlayersForNextRound
+        });
+      }
+      
+      // Proceed to answer review
       this.gameManager.startAnswerReview(gameId);
       this.startGameLoop(gameId);
     }, this.gameManager.getPhaseDuration(GamePhase.QUESTION_ACTIVE));

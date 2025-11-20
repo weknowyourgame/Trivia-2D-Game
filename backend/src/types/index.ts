@@ -72,6 +72,10 @@ export interface GameState {
   playerIds: string[];
   isGameOver: boolean;
   createdAt: number;
+  initialPlayerCount: number;
+  requiredPlayersForNextRound: number;
+  playersCrossedThisRound: Set<string>;
+  waitingForPlayers: boolean;
 }
 
 export interface Room {

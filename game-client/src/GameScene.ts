@@ -151,7 +151,7 @@ export default class GameScene extends Phaser.Scene {
             const wall = this.wallsGroup.create(
               this.layer.x + x * 16 * scale + (16 * scale) / 2,
               y * 16 * scale + (16 * scale) / 2,
-              null
+              ""
             );
             wall.setSize(16 * scale, 16 * scale);
             wall.setVisible(false);
@@ -254,6 +254,7 @@ export default class GameScene extends Phaser.Scene {
             (doorSprite as any).detectionZone = detectionZone;
             (doorSprite as any).playerInZone = false;
             (doorSprite as any).doorOpened = false;
+            (doorSprite as any).playerCrossed = false;
 
             // Add overlap detection with detection zone to trigger door animation
             this.physics.add.overlap(
@@ -267,6 +268,44 @@ export default class GameScene extends Phaser.Scene {
                 ) {
                   doorSprite.play("doorOpen");
                   (doorSprite as any).doorOpened = true;
+                }
+              },
+              undefined,
+              this
+            );
+
+            // Create crossing detection zone on the other side of the door
+            const crossingZone = this.add.rectangle(
+              this.layer.x + (x + 1) * 16 * scale,
+              (y + 1) * 16 * scale - 10 * scale, // Behind the door (further back)
+              40 * scale, // Wider
+              1 * scale, // Taller
+              0xff0000,
+              0.3 // Make it visible for debugging
+            );
+            this.physics.add.existing(crossingZone);
+            (crossingZone.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+            
+            (doorSprite as any).crossingZone = crossingZone;
+
+            // Detect when player crosses through the door
+            this.physics.add.overlap(
+              this.player,
+              crossingZone,
+              () => {
+                const username = localStorage.getItem("playerUsername") || "Adventurer";
+                console.log(`🚪 Player ${username} is in crossing zone at (${x}, ${y}), doorOpened: ${(doorSprite as any).doorOpened}, playerCrossed: ${(doorSprite as any).playerCrossed}`);
+                
+                // Only trigger once per door opening
+                if ((doorSprite as any).doorOpened && !(doorSprite as any).playerCrossed) {
+                  (doorSprite as any).playerCrossed = true;
+                  console.log(`✅ Player ${username} CROSSED through door at (${x}, ${y})`);
+                  
+                  // TODO :  add more logic here, like:
+                  // - Emit socket event
+                  // - Trigger next round
+                  // - Update score
+                  // - Load next level
                 }
               },
               undefined,
@@ -546,7 +585,7 @@ export default class GameScene extends Phaser.Scene {
 
       const detectionZone = (doorSprite as any).detectionZone;
       const playerInZone =
-        detectionZone && this.physics.overlap(this.player, detectionZone);
+        detectionZone && this.player && this.physics.overlap(this.player, detectionZone);
 
       // Update player in zone state
       const wasInZone = (doorSprite as any).playerInZone;
@@ -569,6 +608,7 @@ export default class GameScene extends Phaser.Scene {
         // If player left zone and door was open, close it
         else if (currentFrame === 5 && !playerInZone && wasInZone) {
           (doorSprite as any).doorOpened = false; // Reset flag
+          (doorSprite as any).playerCrossed = false; // Reset crossing flag
           doorSprite.anims.playReverse("doorOpen");
           // Re-enable collision
           if (doorSprite.body) {

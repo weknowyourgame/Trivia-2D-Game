@@ -21,7 +21,7 @@ export default class HomeScene extends Phaser.Scene {
     if (!existingMusic) {
       this.music = this.sound.add("ost", {
         volume: 0.3,
-        loop: true
+        loop: true,
       });
       this.music.play();
     } else {
@@ -48,26 +48,41 @@ export default class HomeScene extends Phaser.Scene {
     const menuStartY = centerY + 150;
     const spacing = 45;
 
-    this.createMenuItem(centerX, menuStartY, "START GAME", () => this.startGame("start"));
-    this.createMenuItem(centerX, menuStartY + spacing, "OPTIONS", () => this.showSettings());
-    this.createMenuItem(centerX, menuStartY + spacing * 2, "ACHIEVEMENTS", () => this.showLeaderboards());
-    this.createMenuItem(centerX, menuStartY + spacing * 3, "EXTRAS", () => this.quitGame());
+    this.createMenuItem(centerX, menuStartY, "START GAME", () =>
+      this.startGame("start")
+    );
+    this.createMenuItem(centerX, menuStartY + spacing, "OPTIONS", () =>
+      this.showSettings()
+    );
+    this.createMenuItem(centerX, menuStartY + spacing * 2, "ACHIEVEMENTS", () =>
+      this.showLeaderboards()
+    );
+    this.createMenuItem(centerX, menuStartY + spacing * 3, "EXTRAS", () =>
+      this.quitGame()
+    );
   }
 
-  private createMenuItem(x: number, y: number, text: string, callback: () => void): void {
-    const menuText = this.add.text(x, y, text, {
-      fontSize: "32px",
-      color: "#C4B5A0",
-      fontFamily: "Cinzel, Georgia, serif",
-      align: "center",
-      shadow: {
-        offsetX: 2,
-        offsetY: 2,
-        color: "#000000",
-        blur: 3,
-        fill: true,
-      },
-    }).setOrigin(0.5);
+  private createMenuItem(
+    x: number,
+    y: number,
+    text: string,
+    callback: () => void
+  ): void {
+    const menuText = this.add
+      .text(x, y, text, {
+        fontSize: "32px",
+        color: "#C4B5A0",
+        fontFamily: "Cinzel, Georgia, serif",
+        align: "center",
+        shadow: {
+          offsetX: 2,
+          offsetY: 2,
+          color: "#000000",
+          blur: 3,
+          fill: true,
+        },
+      })
+      .setOrigin(0.5);
 
     menuText.setInteractive({ useHandCursor: true });
 
@@ -93,16 +108,16 @@ export default class HomeScene extends Phaser.Scene {
 
   private startGame(mode: string): void {
     console.log(`Starting ${mode} mode`);
-    
+
     // Store mode in localStorage
     localStorage.setItem("gameMode", mode);
     localStorage.setItem("playerUsername", "Adventurer");
-    
+
     // Fade out camera
     this.cameras.main.fadeOut(1000, 0, 0, 0);
-    
+
     // Start the game scene after fade
-    this.cameras.main.once('camerafadeoutcomplete', () => {
+    this.cameras.main.once("camerafadeoutcomplete", () => {
       this.scene.start("GameScene");
     });
   }
@@ -122,6 +137,4 @@ export default class HomeScene extends Phaser.Scene {
     // In a real app, this would close the window or return to main menu
     window.close();
   }
-
-
 }

@@ -62,6 +62,7 @@ export default class GameScene extends Phaser.Scene {
     // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
+    this.load.image("desert_demo_objects", "/assets/desert_demo_objects.png");
 
     // Load heart spritesheet to show only first row
     this.load.spritesheet("heart", "/assets/hearts.png", {
@@ -148,7 +149,7 @@ export default class GameScene extends Phaser.Scene {
     if (!this.sound.get("ost")) {
       const music = this.sound.add("ost", {
         volume: 0.3,
-        loop: true
+        loop: true,
       });
       music.play();
     }
@@ -166,29 +167,38 @@ export default class GameScene extends Phaser.Scene {
       "Tileset_Dungeon"
     );
     const doorTileset = this.map.addTilesetImage("Door", "Door");
+    const desertTileset = this.map.addTilesetImage(
+      "desert_demo_objects",
+      "desert_demo_objects"
+    );
 
     const scale = 4;
     let worldWidth = 0;
     let worldHeight = 0;
 
-    // Just create ONE layer to verify it works
-    if (dungeonTileset && doorTileset) {
+    // Create layers
+    if (dungeonTileset && doorTileset && desertTileset) {
+      // Layer 1 - background
       this.layer = this.map.createLayer(
         "Tile Layer 1",
-        [dungeonTileset, doorTileset],
+        [dungeonTileset, doorTileset, desertTileset],
         0,
         0
       );
 
       if (this.layer) {
         this.layer.setScale(scale);
-        this.layer.setPipeline('Light2D'); // Enable lighting on tilemap layer
+        this.layer.setPipeline("Light2D"); // Enable lighting on tilemap layer
 
         const collisionTileIndexes = [
           106, 107, 108, 109, 132, 133, 134, 135, 158, 161, 184, 187, 210, 211,
           212, 213, 236, 237, 238, 239,
         ];
-        this.layer.setCollision(collisionTileIndexes);
+        // Desert objects with collision: firstgid=325, so tile IDs are 325+4, 325+5, etc.
+        const desertCollisionTiles = [
+          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379
+        ]; // tiles 4,5,8,9,10,20,21,40,41,42,43,53,54 offset by firstgid 325
+        this.layer.setCollision([...collisionTileIndexes, ...desertCollisionTiles]);
 
         worldWidth = this.map.width * 16 * scale;
         worldHeight = this.map.height * 16 * scale;
@@ -197,6 +207,21 @@ export default class GameScene extends Phaser.Scene {
 
         const gameWidth = this.cameras.main.width;
         this.layer.x = (gameWidth - worldWidth) / 2;
+      }
+
+      // Layer 2 - foreground objects
+      const layer2 = this.map.createLayer(
+        "Tile Layer 2",
+        [dungeonTileset, doorTileset, desertTileset],
+        0,
+        0
+      );
+
+      if (layer2 && this.layer) {
+        layer2.setScale(scale);
+        layer2.setPipeline("Light2D"); // Enable lighting on layer 2
+        layer2.x = this.layer.x; // Align with layer 1
+        // No collision on layer 2 since it's decorative
       }
     }
 
@@ -229,7 +254,7 @@ export default class GameScene extends Phaser.Scene {
       "player"
     );
     this.player.setScale(5);
-    this.player.setPipeline('Light2D'); // Enable lighting on player
+    this.player.setPipeline("Light2D"); // Enable lighting on player
 
     // Adjust collision box to be smaller near the feet
     // Original sprite is 16x16, scaled 5x = 80x80
@@ -338,13 +363,17 @@ export default class GameScene extends Phaser.Scene {
             );
             doorSprite.setScale(scale); // Scale to fill the 2x2 tile area (32x32 * 4 = 128px)
             doorSprite.setDepth(doorSprite.y); // Use Y position for depth sorting
-            doorSprite.setPipeline('Light2D'); // Enable lighting on door sprites
+            doorSprite.setPipeline("Light2D"); // Enable lighting on door sprites
 
             // Calculate which room this door belongs to based on world Y position
             const doorWorldY = (y + 1) * 16 * scale; // Center Y of door in world coords
             const doorRoomIndex = Math.floor(doorWorldY / (13 * 16 * scale));
-            
-            console.log(`Door at tile (${x},${y}) -> world Y: ${doorWorldY}, room index: ${doorRoomIndex}, room height: ${13 * 16 * scale}`);
+
+            console.log(
+              `Door at tile (${x},${y}) -> world Y: ${doorWorldY}, room index: ${doorRoomIndex}, room height: ${
+                13 * 16 * scale
+              }`
+            );
 
             // Add warm yellow light above the door
             const doorLight = this.lights.addLight(
@@ -361,7 +390,11 @@ export default class GameScene extends Phaser.Scene {
               console.log(`Created new light array for room ${doorRoomIndex}`);
             }
             this.doorLights.get(doorRoomIndex)?.push(doorLight);
-            console.log(`Added light to room ${doorRoomIndex}, now has ${this.doorLights.get(doorRoomIndex)?.length} lights`);
+            console.log(
+              `Added light to room ${doorRoomIndex}, now has ${
+                this.doorLights.get(doorRoomIndex)?.length
+              } lights`
+            );
 
             // Enable physics body for collision
             doorSprite.body?.setSize(32, 32);
@@ -429,11 +462,15 @@ export default class GameScene extends Phaser.Scene {
     this.currentRoomIndex = playerRoomIndex;
     const numSlimes = Math.floor(this.map.height / 13 / 3); // One slime every 3 rooms (13 rows per room)
 
-    console.log(`Spawning ${numSlimes} slimes in map (excluding player spawn room ${playerRoomIndex})`);
+    console.log(
+      `Spawning ${numSlimes} slimes in map (excluding player spawn room ${playerRoomIndex})`
+    );
     console.log(`Map dimensions: ${mapWorldWidth}x${mapWorldHeight}`);
     console.log(`Player position: (${this.player.x}, ${this.player.y})`);
-    console.log(`Player room index: ${playerRoomIndex}, Room height: ${this.roomHeight}`);
-    
+    console.log(
+      `Player room index: ${playerRoomIndex}, Room height: ${this.roomHeight}`
+    );
+
     // Check if slime texture loaded
     if (!this.textures.exists("slime")) {
       console.error("Slime texture not loaded!");
@@ -446,7 +483,7 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < numSlimes; i++) {
       // Random position within the map bounds, excluding player spawn room
       let x, y, slimeRoomIndex;
-      
+
       do {
         x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
         y = Phaser.Math.Between(100, mapWorldHeight - 100);
@@ -517,8 +554,10 @@ export default class GameScene extends Phaser.Scene {
     const batScale = 2;
     const numBats = Math.floor(this.map.height / 13 / 3); // One bat every 3 rooms
 
-    console.log(`Spawning ${numBats} bats in map (excluding player spawn room ${playerRoomIndex})`);
-    
+    console.log(
+      `Spawning ${numBats} bats in map (excluding player spawn room ${playerRoomIndex})`
+    );
+
     // Check if bat texture loaded
     if (!this.textures.exists("bat")) {
       console.error("Bat texture not loaded!");
@@ -529,7 +568,7 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < numBats; i++) {
       // Random position within the map bounds, excluding player spawn room
       let x, y, batRoomIndex;
-      
+
       do {
         x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
         y = Phaser.Math.Between(100, mapWorldHeight - 100);
@@ -1015,23 +1054,31 @@ export default class GameScene extends Phaser.Scene {
     // Check if player changed rooms and turn off lights in rooms behind
     const newRoomIndex = Math.floor(this.player.y / this.roomHeight);
     if (newRoomIndex !== this.currentRoomIndex) {
-      console.log(`Player changed rooms: ${this.currentRoomIndex} -> ${newRoomIndex}`);
+      console.log(
+        `Player changed rooms: ${this.currentRoomIndex} -> ${newRoomIndex}`
+      );
       // Player moved to a different room
       // Since Y=0 is top and player moves UP (decreasing Y), lower room index = ahead
       // Turn off lights in all rooms behind the player (higher room index = lower on map = behind)
       this.doorLights.forEach((lights, roomIndex) => {
         if (roomIndex > newRoomIndex) {
           // This room is behind the player (higher Y, lower on map), turn off its lights
-          console.log(`Turning OFF lights in room ${roomIndex} (behind player)`);
-          lights.forEach(light => light.setIntensity(0));
-        } else if (roomIndex === newRoomIndex || roomIndex === newRoomIndex - 1 || roomIndex === newRoomIndex + 1) {
+          console.log(
+            `Turning OFF lights in room ${roomIndex} (behind player)`
+          );
+          lights.forEach((light) => light.setIntensity(0));
+        } else if (
+          roomIndex === newRoomIndex ||
+          roomIndex === newRoomIndex - 1 ||
+          roomIndex === newRoomIndex + 1
+        ) {
           // Current room and adjacent rooms - keep lights on
           console.log(`Keeping lights ON in room ${roomIndex}`);
-          lights.forEach(light => light.setIntensity(0.6));
+          lights.forEach((light) => light.setIntensity(0.6));
         } else {
           // Rooms far ahead - turn off
           console.log(`Turning OFF lights in room ${roomIndex} (far ahead)`);
-          lights.forEach(light => light.setIntensity(0));
+          lights.forEach((light) => light.setIntensity(0));
         }
       });
       this.currentRoomIndex = newRoomIndex;

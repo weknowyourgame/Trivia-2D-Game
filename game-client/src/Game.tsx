@@ -1,5 +1,6 @@
 import { useRef, useEffect } from "react";
 import Phaser from "phaser";
+import HomeScene from "./HomeScene";
 import GameScene from "./GameScene";
 
 export default function Game() {
@@ -11,7 +12,7 @@ export default function Game() {
       width: window.innerWidth,
       height: window.innerHeight,
       parent: containerRef.current as HTMLElement,
-      scene: GameScene,
+      scene: [HomeScene, GameScene], // HomeScene starts first
       physics: {
         default: "arcade",
         arcade: { debug: false },

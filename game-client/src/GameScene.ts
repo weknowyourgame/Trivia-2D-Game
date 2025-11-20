@@ -183,7 +183,35 @@ export default class GameScene extends Phaser.Scene {
     this.questionUI = new QuestionUI(this);
     
     // Create invisible door colliders
-    // this.createDoorColliders();
+    this.createDoorColliders();
+    
+    // Show welcome message with username
+    const username = localStorage.getItem("playerUsername") || "Adventurer";
+    const welcomeText = this.add.text(
+      this.cameras.main.width / 2,
+      50,
+      `Welcome, ${username}!`,
+      {
+        fontSize: "32px",
+        color: "#FFD700",
+        fontFamily: "Arial",
+        stroke: "#000000",
+        strokeThickness: 4,
+      }
+    );
+    welcomeText.setOrigin(0.5);
+    welcomeText.setScrollFactor(0);
+    welcomeText.setDepth(1000);
+    
+    // Fade out after 3 seconds
+    this.time.delayedCall(3000, () => {
+      this.tweens.add({
+        targets: welcomeText,
+        alpha: 0,
+        duration: 1000,
+        onComplete: () => welcomeText.destroy(),
+      });
+    });
   }
 
   private setupSocketHandlers(): void {

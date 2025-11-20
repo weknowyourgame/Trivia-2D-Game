@@ -39,6 +39,8 @@ export interface Player {
   currentDoor: DoorOption | null;
   lastAnswerTime: number | null;
   isConnected: boolean;
+  doorsCrossed: number;
+  currentRound: number;
 }
 
 export interface Question {

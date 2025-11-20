@@ -114,6 +114,11 @@ export class SocketManager {
     this.lastMovementSent = now;
     this.lastPosition = { ...position };
   }
+
+  sendDoorCrossed(): void {
+    if (!this.socket) return;
+    this.socket.emit('doorCrossed');
+  }
   
   disconnect(): void {
     this.socket?.disconnect();

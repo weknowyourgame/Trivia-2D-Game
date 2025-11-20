@@ -1,8 +1,13 @@
 import { useRef, useEffect } from "react";
 import Phaser from "phaser";
 import GameScene from "./GameScene";
+import { CharacterType } from "./CharacterSelector";
 
-export default function Game() {
+interface GameProps {
+  character: CharacterType;
+}
+
+export default function Game({ character }: GameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,11 +33,14 @@ export default function Game() {
     };
 
     const game = new Phaser.Game(config);
+    
+    // Pass character to scene
+    game.scene.start("GameScene", { character });
 
     return () => {
       game.destroy(true);
     };
-  }, []);
+  }, [character]);
 
   return <div ref={containerRef} className="game-container" />;
 }

@@ -27,7 +27,7 @@ export default class GameScene extends Phaser.Scene {
     this.load.image("Door", "/assets/Door.png");
 
     // Load tilemap after images
-    this.load.tilemapTiledJSON("tilemap", "/assets/theMap.json");
+    this.load.tilemapTiledJSON("tilemap", "/assets/theNewMap.json");
 
     // Load door spritesheet (32x32, 6 frames)
     this.load.spritesheet("doorAnim", "/assets/Door.png", {
@@ -143,10 +143,11 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Create player sprite (spawn a bit below center)
+    // Create player sprite (spawn at bottom of the map)
+    const worldHeight = this.map.height * 16 * scale;
     this.player = this.physics.add.sprite(
       this.cameras.main.width / 2,
-      this.cameras.main.height / 2 + 100,
+      worldHeight - 700, // Spawn near bottom of map, a bit higher
       "player"
     );
     this.player.setScale(5);
@@ -176,16 +177,16 @@ export default class GameScene extends Phaser.Scene {
       repeat: 0,
     });
 
-    // Find all door tiles (311, 312, 323, 324) and replace with animated sprites
-    // Doors are 2x2 tiles (311=top-left, 312=top-right, 323=bottom-left, 324=bottom-right)
-    // Only create one sprite per door by detecting the top-left tile (311)
+    // Find all door tiles (287, 288, 299, 300) and replace with animated sprites
+    // Doors are 2x2 tiles (287=top-left, 288=top-right, 299=bottom-left, 300=bottom-right)
+    // Only create one sprite per door by detecting the top-left tile (287)
     const processedDoors = new Set<string>();
     if (this.layer) {
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
           const tile = this.layer.getTileAt(x, y);
-          // Only process top-left door tile (311)
-          if (tile && tile.index === 311) {
+          // Only process top-left door tile (287)
+          if (tile && tile.index === 287) {
             const doorKey = `${x},${y}`;
             if (processedDoors.has(doorKey)) continue;
             processedDoors.add(doorKey);

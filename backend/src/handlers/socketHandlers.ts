@@ -51,6 +51,30 @@ export class SocketHandlers {
       roomId: room.roomId
     });
 
+    // Get existing players in the room (excluding the newly connected player)
+    const existingPlayers = this.playerManager.getConnectedPlayersInRoom(room.roomId)
+      .filter(p => p.playerId !== player.playerId);
+
+    // Send existing players to the newly connected player
+    socket.emit('existingPlayers', {
+      players: existingPlayers.map(p => ({
+        playerId: p.playerId,
+        username: p.username,
+        character: p.character,
+        position: p.position,
+        currentDoor: p.currentDoor
+      }))
+    });
+
+    // Broadcast new player joined to all other players in the room
+    socket.to(room.roomId).emit('playerJoined', {
+      playerId: player.playerId,
+      username: player.username,
+      character: player.character,
+      position: player.position,
+      currentDoor: player.currentDoor
+    });
+
     // Broadcast room state to all players in the room
     this.broadcastRoomState(room.roomId);
 
@@ -104,7 +128,8 @@ export class SocketHandlers {
       username: player.username,
       character: player.character,
       position: data.position,
-      door: data.door
+      door: data.door,
+      timestamp: Date.now()
     });
   }
 

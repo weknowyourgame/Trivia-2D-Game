@@ -36,12 +36,21 @@ export default class GameScene extends Phaser.Scene {
   private doorSprites: Phaser.Physics.Arcade.Sprite[] = [];
   private lives: number = 3;
   private heartSprites: Phaser.GameObjects.Image[] = [];
+  private slimes: Phaser.Physics.Arcade.Sprite[] = [];
+  private bats: Phaser.Physics.Arcade.Sprite[] = [];
+  private lastDamageTime: number = 0;
+  private damageImmunityDuration: number = 1000; // 1 second immunity after taking damage
 
   constructor() {
     super({ key: "GameScene" });
   }
 
   preload(): void {
+    // Add error handling for asset loading
+    this.load.on("loaderror", (file: any) => {
+      console.error("Error loading file:", file.key, file.url);
+    });
+
     // Load tileset images FIRST before tilemap
     this.load.image("Tileset_Dungeon", "/assets/Tileset_Dungeon.png");
     this.load.image("Door", "/assets/Door.png");
@@ -50,6 +59,22 @@ export default class GameScene extends Phaser.Scene {
     this.load.spritesheet("heart", "/assets/hearts.png", {
       frameWidth: 16,
       frameHeight: 16,
+    });
+
+    // Load slime spritesheet (16x16, 12 frames)
+    this.load.spritesheet("slime", "/assets/Slime Move.png", {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
+
+    console.log(
+      "Attempting to load slime spritesheet from: /assets/Slime Move.png"
+    );
+
+    // Load bat spritesheet (64x64, 4 frames)
+    this.load.spritesheet("bat", "/assets/Bat.png", {
+      frameWidth: 64,
+      frameHeight: 64,
     });
 
     // Load tilemap after images
@@ -119,6 +144,8 @@ export default class GameScene extends Phaser.Scene {
     const doorTileset = this.map.addTilesetImage("Door", "Door");
 
     const scale = 4;
+    let worldWidth = 0;
+    let worldHeight = 0;
 
     // Just create ONE layer to verify it works
     if (dungeonTileset && doorTileset) {
@@ -138,8 +165,8 @@ export default class GameScene extends Phaser.Scene {
         ];
         this.layer.setCollision(collisionTileIndexes);
 
-        const worldWidth = this.map.width * 16 * scale;
-        const worldHeight = this.map.height * 16 * scale;
+        worldWidth = this.map.width * 16 * scale;
+        worldHeight = this.map.height * 16 * scale;
 
         this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
@@ -170,7 +197,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Create player sprite (spawn at bottom of the map)
-    const worldHeight = this.map.height * 16 * scale;
+    // Reuse worldWidth and worldHeight from above
     this.player = this.physics.add.sprite(
       this.cameras.main.width / 2,
       worldHeight - 700, // Spawn near bottom of map, a bit higher
@@ -203,7 +230,7 @@ export default class GameScene extends Phaser.Scene {
       );
       heart.setScale(heartScale);
       heart.setScrollFactor(0); // Fixed to camera
-      heart.setDepth(1000); // Always on top
+      heart.setDepth(10000); // Always on top
       this.heartSprites.push(heart);
     }
 
@@ -230,6 +257,28 @@ export default class GameScene extends Phaser.Scene {
       }),
       frameRate: 10,
       repeat: 0,
+    });
+
+    // Create slime animation
+    this.anims.create({
+      key: "slimeMove",
+      frames: this.anims.generateFrameNumbers("slime", {
+        start: 0,
+        end: 11,
+      }),
+      frameRate: 8,
+      repeat: -1,
+    });
+
+    // Create bat animation
+    this.anims.create({
+      key: "batFly",
+      frames: this.anims.generateFrameNumbers("bat", {
+        start: 0,
+        end: 3,
+      }),
+      frameRate: 8,
+      repeat: -1,
     });
 
     // Find all door tiles (287, 288, 299, 300) and replace with animated sprites
@@ -314,6 +363,187 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
+    // Spawn slimes randomly in rooms (approximately every 3 rooms)
+    // Exclude the bottom room where player spawns
+    const slimeScale = 4;
+    const mapWorldWidth = this.map.width * 16 * scale;
+    const mapWorldHeight = this.map.height * 16 * scale;
+    const roomHeight = 13 * 16 * scale; // Each room is 13 tiles tall
+    const playerRoomIndex = Math.floor(this.player.y / roomHeight);
+    const numSlimes = Math.floor(this.map.height / 13 / 3); // One slime every 3 rooms (13 rows per room)
+
+    console.log(`Spawning ${numSlimes} slimes in map (excluding player spawn room ${playerRoomIndex})`);
+    console.log(`Map dimensions: ${mapWorldWidth}x${mapWorldHeight}`);
+    console.log(`Player position: (${this.player.x}, ${this.player.y})`);
+    console.log(`Player room index: ${playerRoomIndex}, Room height: ${roomHeight}`);
+    
+    // Check if slime texture loaded
+    if (!this.textures.exists("slime")) {
+      console.error("Slime texture not loaded!");
+    } else {
+      console.log("Slime texture loaded successfully");
+      const slimeTexture = this.textures.get("slime");
+      console.log("Slime texture info:", slimeTexture);
+    }
+
+    for (let i = 0; i < numSlimes; i++) {
+      // Random position within the map bounds, excluding player spawn room
+      let x, y, slimeRoomIndex;
+      
+      do {
+        x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
+        y = Phaser.Math.Between(100, mapWorldHeight - 100);
+        slimeRoomIndex = Math.floor(y / roomHeight);
+      } while (slimeRoomIndex === playerRoomIndex); // Keep trying until not in player's room
+
+      const slime = this.physics.add.sprite(x, y, "slime", 0);
+      slime.setScale(slimeScale);
+      slime.play("slimeMove");
+      slime.setDepth(y);
+
+      console.log(
+        `Slime ${i} spawned at (${x}, ${y}), depth: ${y}, visible: ${slime.visible}`
+      );
+
+      // Disable gravity for slime
+      if (slime.body) {
+        (slime.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+      }
+
+      // Enable physics and set bounce
+      slime.setBounce(1, 1);
+      slime.setCollideWorldBounds(true);
+
+      // Set initial random velocity
+      const initialVelocityX = Phaser.Math.Between(-50, 50);
+      const initialVelocityY = Phaser.Math.Between(-80, -40);
+      slime.setVelocity(initialVelocityX, initialVelocityY);
+
+      // Give slime random velocity (jumping movement)
+      const jumpInterval = Phaser.Math.Between(1500, 2500);
+      this.time.addEvent({
+        delay: jumpInterval,
+        callback: () => {
+          if (slime.body && slime.active) {
+            const velocityX = Phaser.Math.Between(-50, 50);
+            const velocityY = Phaser.Math.Between(-80, -40); // Jump upward
+            slime.setVelocity(velocityX, velocityY);
+          }
+        },
+        loop: true,
+      });
+
+      // Add collisions with walls
+      if (this.wallsGroup) {
+        this.physics.add.collider(slime, this.wallsGroup);
+      }
+
+      // Add collision with all doors to prevent room escape
+      this.doorSprites.forEach((doorSprite) => {
+        this.physics.add.collider(slime, doorSprite);
+      });
+
+      // Add overlap with player for damage
+      if (this.player) {
+        this.physics.add.overlap(this.player, slime, () => {
+          this.handleSlimeDamage();
+        });
+      }
+
+      this.slimes.push(slime);
+    }
+
+    console.log(`Total slimes spawned: ${this.slimes.length}`);
+
+    // Spawn bats randomly in rooms (approximately every 3 rooms)
+    // Exclude the bottom room where player spawns
+    const batScale = 2;
+    const numBats = Math.floor(this.map.height / 13 / 3); // One bat every 3 rooms
+
+    console.log(`Spawning ${numBats} bats in map (excluding player spawn room ${playerRoomIndex})`);
+    
+    // Check if bat texture loaded
+    if (!this.textures.exists("bat")) {
+      console.error("Bat texture not loaded!");
+    } else {
+      console.log("Bat texture loaded successfully");
+    }
+
+    for (let i = 0; i < numBats; i++) {
+      // Random position within the map bounds, excluding player spawn room
+      let x, y, batRoomIndex;
+      
+      do {
+        x = Phaser.Math.Between(mapWorldWidth * 0.2, mapWorldWidth * 0.8);
+        y = Phaser.Math.Between(100, mapWorldHeight - 100);
+        batRoomIndex = Math.floor(y / roomHeight);
+      } while (batRoomIndex === playerRoomIndex); // Keep trying until not in player's room
+
+      const bat = this.physics.add.sprite(x, y, "bat", 0);
+      bat.setScale(batScale);
+      bat.play("batFly");
+      bat.setDepth(y);
+
+      console.log(
+        `Bat ${i} spawned at (${x}, ${y}), depth: ${y}, visible: ${bat.visible}`
+      );
+
+      // Disable gravity for bat
+      if (bat.body) {
+        (bat.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+      }
+
+      // Set smaller collision box for the bat
+      // Original sprite is 64x64, scaled 2x = 128x128
+      // Set body size smaller to make collision more forgiving
+      bat.body?.setSize(40, 40);
+      (bat.body as Phaser.Physics.Arcade.Body).setOffset(12, 12);
+
+      // Enable physics and set bounce
+      bat.setBounce(1, 1);
+      bat.setCollideWorldBounds(true);
+
+      // Set initial random velocity
+      const initialVelocityX = Phaser.Math.Between(-50, 50);
+      const initialVelocityY = Phaser.Math.Between(-80, -40);
+      bat.setVelocity(initialVelocityX, initialVelocityY);
+
+      // Give bat random velocity (flying movement)
+      const flyInterval = Phaser.Math.Between(1500, 2500);
+      this.time.addEvent({
+        delay: flyInterval,
+        callback: () => {
+          if (bat.body && bat.active) {
+            const velocityX = Phaser.Math.Between(-50, 50);
+            const velocityY = Phaser.Math.Between(-80, -40);
+            bat.setVelocity(velocityX, velocityY);
+          }
+        },
+        loop: true,
+      });
+
+      // Add collisions with walls
+      if (this.wallsGroup) {
+        this.physics.add.collider(bat, this.wallsGroup);
+      }
+
+      // Add collision with all doors to prevent room escape
+      this.doorSprites.forEach((doorSprite) => {
+        this.physics.add.collider(bat, doorSprite);
+      });
+
+      // Add overlap with player for damage
+      if (this.player) {
+        this.physics.add.overlap(this.player, bat, () => {
+          this.handleSlimeDamage();
+        });
+      }
+
+      this.bats.push(bat);
+    }
+
+    console.log(`Total bats spawned: ${this.bats.length}`);
+
     // Create animations for 8 directions
     const directions = [
       { key: "down", frames: [0, 1, 2, 3] },
@@ -376,7 +606,7 @@ export default class GameScene extends Phaser.Scene {
     );
     welcomeText.setOrigin(0.5);
     welcomeText.setScrollFactor(0);
-    welcomeText.setDepth(1000);
+    welcomeText.setDepth(10000);
 
     // Fade out after 3 seconds
     this.time.delayedCall(3000, () => {
@@ -649,6 +879,20 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    // Update slime depths for proper sorting
+    this.slimes.forEach((slime) => {
+      if (slime.active) {
+        slime.setDepth(slime.y);
+      }
+    });
+
+    // Update bat depths for proper sorting
+    this.bats.forEach((bat) => {
+      if (bat.active) {
+        bat.setDepth(bat.y);
+      }
+    });
+
     let velocityX = 0;
     let velocityY = 0;
 
@@ -715,5 +959,69 @@ export default class GameScene extends Phaser.Scene {
     if (this.isQuestionActive) {
       this.questionUI.update(_delta);
     }
+  }
+
+  private handleSlimeDamage(): void {
+    const currentTime = this.time.now;
+
+    // Check if player is immune (recently took damage)
+    if (currentTime - this.lastDamageTime < this.damageImmunityDuration) {
+      return;
+    }
+
+    // Reduce lives
+    this.lives--;
+    this.lastDamageTime = currentTime;
+
+    // Hide a heart
+    if (this.lives >= 0 && this.lives < this.heartSprites.length) {
+      this.heartSprites[this.lives].setVisible(false);
+    }
+
+    // Flash player to indicate damage
+    if (this.player) {
+      this.tweens.add({
+        targets: this.player,
+        alpha: 0.3,
+        duration: 100,
+        yoyo: true,
+        repeat: 5,
+      });
+    }
+
+    // Check for game over
+    if (this.lives <= 0) {
+      this.gameOver();
+    }
+  }
+
+  private gameOver(): void {
+    // Display game over text
+    const gameOverText = this.add.text(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2,
+      "GAME OVER",
+      {
+        fontSize: "64px",
+        color: "#FF0000",
+        fontFamily: "Arial",
+        stroke: "#000000",
+        strokeThickness: 6,
+      }
+    );
+    gameOverText.setOrigin(0.5);
+    gameOverText.setScrollFactor(0);
+    gameOverText.setDepth(2000);
+
+    // Stop player movement
+    if (this.player) {
+      this.player.setVelocity(0, 0);
+      this.player.anims.pause();
+    }
+
+    // Restart after 3 seconds
+    this.time.delayedCall(3000, () => {
+      this.scene.restart();
+    });
   }
 }

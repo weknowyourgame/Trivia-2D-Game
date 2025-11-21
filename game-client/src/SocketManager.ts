@@ -33,6 +33,8 @@ export class SocketManager {
   public onQuestion?: (data: any) => void;
   public onAnswerReveal?: (data: any) => void;
   public onGameOver?: (data: any) => void;
+  public onMovementPhase?: (data: any) => void;
+  public onRoundEnded?: (data: any) => void;
   
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl;
@@ -85,6 +87,14 @@ export class SocketManager {
     
     this.socket.on('gameOver', (data) => {
       this.onGameOver?.(data);
+    });
+    
+    this.socket.on('movementPhase', (data) => {
+      this.onMovementPhase?.(data);
+    });
+    
+    this.socket.on('roundEnded', (data) => {
+      this.onRoundEnded?.(data);
     });
   }
   

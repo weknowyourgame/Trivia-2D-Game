@@ -30,10 +30,9 @@ export default class GameScene extends Phaser.Scene {
   private questionUI!: QuestionUI;
   private correctDoor: string | null = null;
   private isQuestionActive: boolean = false;
-  private doorColliders: Map<string, Phaser.Physics.Arcade.Sprite> = new Map();
-  private doorColliderObjects: Phaser.Physics.Arcade.Collider[] = [];
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
-  private layers: Phaser.Tilemaps.TilemapLayer[] = [];
+  // Simplified gate system - map door ID (A/B/C/D) to all gates with that ID across all rooms
+  private gatesByDoorId: Map<string, { sprite: Phaser.Physics.Arcade.Sprite, collider: Phaser.Physics.Arcade.Collider, graphics: Phaser.GameObjects.Rectangle, label: Phaser.GameObjects.Text }[]> = new Map();
   private layer2: Phaser.Tilemaps.TilemapLayer | null = null;
   private doorSprites: Phaser.Physics.Arcade.Sprite[] = [];
   private lives: number = 3;
@@ -944,6 +943,11 @@ export default class GameScene extends Phaser.Scene {
 
         if (timeRemaining <= 0) {
           countdownTimer.remove();
+          
+          console.log("⏰ COUNTDOWN FINISHED - Opening all doors for gameplay");
+          // Open all doors when countdown finishes (safety check)
+          this.openAllDoors();
+          
           // Fade out the waiting message
           this.tweens.add({
             targets: [waitingText, countdownText],
@@ -1009,7 +1013,31 @@ export default class GameScene extends Phaser.Scene {
       this.questionUI.hide();
       this.isQuestionActive = false;
       this.correctDoor = null;
-      this.setAllDoorsPassable();
+      this.openAllDoors();
+    };
+
+    this.socketManager.onMovementPhase = (data) => {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🏃 MOVEMENT PHASE STARTED", data);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      // Open all doors during movement phase
+      this.openAllDoors();
+    };
+
+    this.socketManager.onGameStart = (data) => {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🎮 GAME STARTED!", data);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      // Open all doors when game starts
+      this.openAllDoors();
+    };
+
+    this.socketManager.onRoundEnded = (data) => {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🏁 ROUND ENDED - Required players crossed", data);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      // Lock all doors again after round ends (before next question)
+      this.lockAllDoors();
     };
   }
 
@@ -1039,138 +1067,189 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private createDoorColliders(): void {
-    if (!this.player) return;
+    if (!this.player || !this.layer || !this.map) return;
 
-    // Door positions in the tilemap (scaled by 4)
-    // Looking at the tilemap, doors are at tiles 311, 312, 323, 324 (from Door tileset)
-    // They appear at row 12-13, columns 16-17, 20-21, 24-25, 26-27
-    const doorPositions = [
-      {
-        id: "A",
-        x: 16 * 16 * 4,
-        y: 12.5 * 16 * 4,
-        width: 2 * 16 * 4,
-        height: 2 * 16 * 4,
-      }, // First door
-      {
-        id: "B",
-        x: 20 * 16 * 4,
-        y: 12.5 * 16 * 4,
-        width: 2 * 16 * 4,
-        height: 2 * 16 * 4,
-      }, // Second door
-      {
-        id: "C",
-        x: 24 * 16 * 4,
-        y: 12.5 * 16 * 4,
-        width: 2 * 16 * 4,
-        height: 2 * 16 * 4,
-      }, // Third door
-      {
-        id: "D",
-        x: 26 * 16 * 4,
-        y: 12.5 * 16 * 4,
-        width: 2 * 16 * 4,
-        height: 2 * 16 * 4,
-      }, // Fourth door
-    ];
-
-    const player = this.player;
-
-    doorPositions.forEach((doorPos) => {
-      // Create invisible sprite for collision
-      const doorCollider = this.physics.add.sprite(doorPos.x, doorPos.y, "");
-      doorCollider.setDisplaySize(doorPos.width, doorPos.height);
-      doorCollider.setVisible(false); // Set to true to debug door positions
-      doorCollider.setImmovable(true);
-      doorCollider.body?.setSize(doorPos.width, doorPos.height);
-
-      // Debug: Add a text label above each door
-      const label = this.add.text(
-        doorPos.x,
-        doorPos.y - 40,
-        `Door ${doorPos.id}`,
-        {
-          fontSize: "32px",
-          color: "#ffff00",
-          fontFamily: "Arial",
-          stroke: "#000000",
-          strokeThickness: 4,
-        }
-      );
-      label.setOrigin(0.5);
-
-      this.doorColliders.set(doorPos.id, doorCollider);
-
-      // Create collider with player (initially disabled)
-      const collider = this.physics.add.collider(player, doorCollider);
-      collider.active = false; // Start with doors passable
-      this.doorColliderObjects.push(collider);
+    const scale = 4;
+    const doorLabels = ["A", "B", "C", "D"];
+    
+    // Initialize gate maps for each door ID
+    doorLabels.forEach(doorId => {
+      this.gatesByDoorId.set(doorId, []);
     });
 
-    console.log("🚪 Door colliders created:", this.doorColliders.size);
+    // Collect all door positions first
+    const allDoors: { x: number; y: number }[] = [];
+    
+    // Scan the entire map for door tiles (287 = top-left of 2x2 door)
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const tile = this.layer.getTileAt(x, y);
+        
+        if (tile && tile.index === 287) {
+          // Found a door! Calculate its world position
+          const doorWorldX = this.layer.x + (x + 1) * 16 * scale; // Center of door
+          const doorWorldY = (y + 1) * 16 * scale; // Center of door
+          
+          allDoors.push({ x: doorWorldX, y: doorWorldY });
+        }
+      }
+    }
+
+    console.log(`🚪 Found ${allDoors.length} doors total in the map`);
+
+    // Assign door IDs using total count % 4 (A, B, C, D repeating pattern)
+    allDoors.forEach((door, totalIndex) => {
+      const doorId = doorLabels[totalIndex % 4]; // A, B, C, D, A, B, C, D, ...
+      const doorWidth = 2 * 16 * scale;
+      const doorHeight = 2 * 16 * scale;
+      
+      // Create a RECTANGLE graphics object for the gate visual
+      const gateGraphics = this.add.rectangle(door.x, door.y, doorWidth, doorHeight, 0xff0000, 0.5);
+      gateGraphics.setDepth(10000);
+      gateGraphics.setScrollFactor(1);
+      
+      // Create a PHYSICS sprite for collision (separate from visual)
+      const gateSprite = this.physics.add.sprite(door.x, door.y, "");
+      gateSprite.setVisible(false); // The rectangle above is the visual
+      gateSprite.setImmovable(true);
+      
+      // CRITICAL: Set the physics body size and enable it
+      if (gateSprite.body) {
+        const body = gateSprite.body as Phaser.Physics.Arcade.Body;
+        body.setSize(doorWidth, doorHeight);
+        body.setAllowGravity(false);
+        body.setImmovable(true);
+        body.enable = true;
+      }
+      
+      // Add a text label on the gate
+      const gateLabel = this.add.text(door.x, door.y, `${doorId}\nGATE`, {
+        fontSize: "24px",
+        color: "#ffffff",
+        fontFamily: "Arial",
+        stroke: "#000000",
+        strokeThickness: 4,
+        align: "center"
+      });
+      gateLabel.setOrigin(0.5);
+      gateLabel.setDepth(10001);
+      gateLabel.setScrollFactor(1);
+      
+      // Create collider with player (START BLOCKED)
+      const collider = this.physics.add.collider(this.player!, gateSprite);
+      collider.active = true; // START BLOCKED
+      
+      // Store gate reference by door ID
+      this.gatesByDoorId.get(doorId)!.push({
+        sprite: gateSprite,
+        collider: collider,
+        graphics: gateGraphics,
+        label: gateLabel
+      });
+      
+      console.log(`  🚪 Door #${totalIndex} (${doorId}) at (${door.x}, ${door.y})`);
+    });
+
+    // Log summary
+    console.log(`\n🚪 ========== GATE SUMMARY ==========`);
+    doorLabels.forEach(doorId => {
+      const gatesCount = this.gatesByDoorId.get(doorId)?.length || 0;
+      console.log(`  Door ${doorId}: ${gatesCount} gates`);
+    });
+    console.log(`🚪 ====================================\n`);
+    console.log(`⚠️  All gates START BLOCKED - Will open on game start`);
   }
 
   private handleQuestion(data: QuestionData): void {
-    console.log("Question received:", data);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📝 QUESTION RECEIVED:", data.text);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     this.isQuestionActive = true;
     this.correctDoor = null;
 
     // Show question UI
     this.questionUI.show(data);
 
-    // Make all doors impassable during question phase
-    this.setAllDoorsImpassable();
+    // Lock ALL doors when question appears
+    this.lockAllDoors();
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 
   private handleAnswerReveal(data: any): void {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ ANSWER REVEALED:", data.correctAnswer);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     this.correctDoor = data.correctAnswer;
     this.isQuestionActive = false;
 
     // Hide question UI
     this.questionUI.hide();
 
-    // Make only the correct door passable
+    // Open only the correct door
     if (this.correctDoor) {
-      this.setDoorPassability(this.correctDoor, true);
-      console.log(
-        `✅ Correct answer: Door ${this.correctDoor} is now passable`
-      );
+      this.openDoor(this.correctDoor);
+      console.log(`✅ Door ${this.correctDoor} is now open - players can pass!`);
     }
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 
-  private setAllDoorsImpassable(): void {
-    console.log("🚪 Blocking all doors");
-    this.doorColliderObjects.forEach((collider) => {
-      collider.active = true;
+  /**
+   * Lock ALL doors at once - called when question appears or after players cross
+   */
+  private lockAllDoors(): void {
+    console.log("🔒 ========== LOCKING ALL DOORS ==========");
+    let totalLocked = 0;
+    
+    this.gatesByDoorId.forEach((gates, doorId) => {
+      gates.forEach(gate => {
+        gate.collider.active = true; // Block
+        gate.graphics.setFillStyle(0xff0000, 0.7); // Red = locked
+        totalLocked++;
+      });
+      console.log(`  🔒 Door ${doorId}: ${gates.length} gates LOCKED`);
     });
+    
+    console.log(`🔒 Total: ${totalLocked} gates locked\n`);
   }
 
-  private setAllDoorsPassable(): void {
-    console.log("🚪 Opening all doors");
-    this.doorColliderObjects.forEach((collider) => {
-      collider.active = false;
+  /**
+   * Open specific door (A/B/C/D) - unlock all gates with that ID
+   */
+  private openDoor(doorId: string): void {
+    console.log(`🔓 ========== OPENING DOOR ${doorId} ==========`);
+    
+    const gates = this.gatesByDoorId.get(doorId);
+    if (!gates) {
+      console.error(`❌ Door ${doorId} not found!`);
+      return;
+    }
+    
+    gates.forEach(gate => {
+      gate.collider.active = false; // Unlock
+      gate.graphics.setFillStyle(0x00ff00, 0.5); // Green = open
     });
+    
+    console.log(`  ✅ Opened ${gates.length} gates for Door ${doorId}\n`);
   }
 
-  private setDoorPassability(doorLetter: string, passable: boolean): void {
-    console.log(
-      `🚪 Setting door ${doorLetter} to ${passable ? "passable" : "blocked"}`
-    );
-
-    this.doorColliders.forEach((_sprite, id) => {
-      const colliderIndex = Array.from(this.doorColliders.keys()).indexOf(id);
-      const collider = this.doorColliderObjects[colliderIndex];
-
-      if (id === doorLetter) {
-        // This is the correct door - make it passable or not
-        collider.active = !passable;
-      } else {
-        // Wrong doors - keep blocked
-        collider.active = true;
-      }
+  /**
+   * Open all doors - used for movement phase or game over
+   */
+  private openAllDoors(): void {
+    console.log("🔓 ========== OPENING ALL DOORS ==========");
+    let totalOpened = 0;
+    
+    this.gatesByDoorId.forEach((gates) => {
+      gates.forEach(gate => {
+        gate.collider.active = false; // Unlock
+        gate.graphics.setFillStyle(0x00ff00, 0.3); // Green = open, transparent
+        totalOpened++;
+      });
     });
+    
+    console.log(`🔓 Total: ${totalOpened} gates opened\n`);
   }
+
 
   update(time: number, _delta: number): void {
     if (!this.player || !this.cursors) return;

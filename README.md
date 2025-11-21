@@ -1,4 +1,4 @@
-# 7-fortnite
+# 2D Trivia Game
 
 Arabian Nights–inspired party trivia built with a TypeScript backend and a Phaser + React front end. This repo hosts both services so you can run the full multiplayer experience locally or deploy each piece independently.
 

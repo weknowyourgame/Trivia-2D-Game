@@ -34,7 +34,7 @@ export class QuestionUI {
     this.scene = scene;
     this.container = scene.add.container(0, 0);
     this.container.setScrollFactor(0);
-    this.container.setDepth(1000);
+    this.container.setDepth(100000); // Very high depth to appear on top of everything
     this.container.setVisible(false);
 
     // Main background

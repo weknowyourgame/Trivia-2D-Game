@@ -456,7 +456,7 @@ export default class GameScene extends Phaser.Scene {
       );
       heart.setScale(heartScale);
       heart.setScrollFactor(0); // Fixed to camera
-      heart.setDepth(10000); // Always on top
+      heart.setDepth(9000); // High but below UI modals
       this.heartSprites.push(heart);
     }
 
@@ -624,7 +624,7 @@ export default class GameScene extends Phaser.Scene {
               40 * scale, // Wider
               1 * scale, // Taller
               0xff0000,
-              0.3 // Make it visible for debugging
+              0// Make it visible for debugging
             );
             this.physics.add.existing(crossingZone);
             (crossingZone.body as Phaser.Physics.Arcade.Body).setAllowGravity(
@@ -933,7 +933,7 @@ export default class GameScene extends Phaser.Scene {
     );
     waitingText.setOrigin(0.5);
     waitingText.setScrollFactor(0);
-    waitingText.setDepth(10000);
+    waitingText.setDepth(11000); // Above everything during countdown
 
     const countdownText = this.add.text(
       this.cameras.main.width / 2,
@@ -949,7 +949,7 @@ export default class GameScene extends Phaser.Scene {
     );
     countdownText.setOrigin(0.5);
     countdownText.setScrollFactor(0);
-    countdownText.setDepth(10000);
+    countdownText.setDepth(11000); // Above everything during countdown
 
     // Countdown from 10 seconds
     let timeRemaining = 10;
@@ -1091,7 +1091,7 @@ export default class GameScene extends Phaser.Scene {
         const nextCollider = this.roundColliders.get(nextRound);
         if (nextCollider) {
           nextCollider.collider.active = true;
-          nextCollider.graphics.setFillStyle(0xff0000, 0.6);
+          nextCollider.graphics.setFillStyle(0xff0000, 0);
           nextCollider.graphics.setVisible(true);
           nextCollider.label.setVisible(true);
           console.log(`🚧 Round ${nextRound} barrier UP (ready for next round)`);
@@ -1190,8 +1190,8 @@ export default class GameScene extends Phaser.Scene {
       const doorHeight = 2 * 16 * scale;
       
       // Create a RECTANGLE graphics object for the gate visual
-      const gateGraphics = this.add.rectangle(door.x, door.y, doorWidth, doorHeight, 0xff0000, 0.5);
-      gateGraphics.setDepth(10000);
+      const gateGraphics = this.add.rectangle(door.x, door.y, doorWidth, doorHeight, 0xff0000, 0);
+      gateGraphics.setDepth(0); // Lower depth so it appears behind UI
       gateGraphics.setScrollFactor(1);
       
       // Create a PHYSICS sprite for collision (separate from visual)
@@ -1218,7 +1218,7 @@ export default class GameScene extends Phaser.Scene {
         align: "center"
       });
       gateLabel.setOrigin(0.5);
-      gateLabel.setDepth(10001);
+      gateLabel.setDepth(100); // Lower depth so it appears behind UI
       gateLabel.setScrollFactor(1);
       
       // Create collider with player (START BLOCKED)
@@ -1316,11 +1316,10 @@ export default class GameScene extends Phaser.Scene {
         colliderWidth,
         colliderHeight,
         0xff0000, // Red for barriers
-        0.5
+        0
       );
-      barrierGraphics.setDepth(10000);
+      barrierGraphics.setDepth(100); // Lower depth so it appears behind UI
       barrierGraphics.setScrollFactor(1);
-      barrierGraphics.setVisible(true); // Start visible
       
       // Create physics sprite for collision
       const barrierSprite = this.physics.add.sprite(avgX, colliderY, "");
@@ -1345,9 +1344,8 @@ export default class GameScene extends Phaser.Scene {
         align: "center"
       });
       barrierLabel.setOrigin(0.5);
-      barrierLabel.setDepth(10001);
+      barrierLabel.setDepth(100); // Lower depth so it appears behind UI
       barrierLabel.setScrollFactor(1);
-      barrierLabel.setVisible(true); // Start visible
       
       // Create collider with player (START ACTIVE - blocking by default)
       const collider = this.physics.add.collider(this.player!, barrierSprite);
@@ -1393,7 +1391,7 @@ export default class GameScene extends Phaser.Scene {
     const collider = this.roundColliders.get(this.currentGameRound);
     if (collider) {
       collider.collider.active = true;
-      collider.graphics.setFillStyle(0xff0000, 0.6); // Red = blocking
+      collider.graphics.setFillStyle(0xff0000, 0); // Red = blocking
       collider.graphics.setVisible(true);
       collider.label.setVisible(true);
       console.log(`🚧 Round ${this.currentGameRound} barrier UP - question active`);
@@ -1441,7 +1439,7 @@ export default class GameScene extends Phaser.Scene {
     this.gatesByDoorId.forEach((gates, doorId) => {
       gates.forEach(gate => {
         gate.collider.active = true; // Block
-        gate.graphics.setFillStyle(0xff0000, 0.7); // Red = locked
+        gate.graphics.setFillStyle(0xff0000, 0); // Red = locked
         totalLocked++;
       });
       console.log(`  🔒 Door ${doorId}: ${gates.length} gates LOCKED`);
@@ -1461,7 +1459,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     collider.collider.active = true;
-    collider.graphics.setFillStyle(0xff0000, 0.6); // Red = blocked
+    collider.graphics.setFillStyle(0xff0000, 0); // Red = blocked
     collider.graphics.setVisible(true);
     collider.label.setVisible(true);
     
@@ -1479,7 +1477,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     collider.collider.active = false;
-    collider.graphics.setFillStyle(0x00ff00, 0.3); // Green = open
+    collider.graphics.setFillStyle(0x00ff00, 0); // Green = open
     collider.graphics.setVisible(true);
     collider.label.setVisible(true);
     
@@ -1591,7 +1589,7 @@ export default class GameScene extends Phaser.Scene {
     this.gatesByDoorId.forEach((gates) => {
       gates.forEach(gate => {
         gate.collider.active = false; // Unlock
-        gate.graphics.setFillStyle(0x00ff00, 0.3); // Green = open, transparent
+        gate.graphics.setFillStyle(0x00ff00, 0); // Green = open, transparent
         totalOpened++;
       });
     });

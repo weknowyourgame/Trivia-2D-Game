@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { SocketManager, PlayerData } from "./SocketManager";
 import { RemotePlayer } from "./RemotePlayer";
 import { QuestionUI, QuestionData } from "./QuestionUI";
+import { LeaderboardUI, LeaderboardData } from "./LeaderboardUI";
 
 interface CursorKeys {
   up: Phaser.Input.Keyboard.Key;
@@ -28,6 +29,7 @@ export default class GameScene extends Phaser.Scene {
 
   // Quiz game properties
   private questionUI!: QuestionUI;
+  private leaderboardUI!: LeaderboardUI;
   private correctDoor: string | null = null;
   private isQuestionActive: boolean = false;
   private wallsGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
@@ -428,12 +430,12 @@ export default class GameScene extends Phaser.Scene {
     // Camera follows player
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-    // Create heart icons in top right corner
+    // Create heart icons in bottom right corner
     const heartScale = 3;
     const heartSize = 16 * heartScale;
     const heartSpacing = 10;
     const startX = this.cameras.main.width - heartSize - 20;
-    const startY = 60; // Moved down from 20 to 60
+    const startY = this.cameras.main.height - heartSize - 20; // Bottom right
 
     for (let i = 0; i < 3; i++) {
       const heart = this.add.image(
@@ -896,6 +898,9 @@ export default class GameScene extends Phaser.Scene {
     // Initialize question UI
     this.questionUI = new QuestionUI(this);
 
+    // Initialize leaderboard UI
+    this.leaderboardUI = new LeaderboardUI(this);
+
     // Create invisible door colliders
     this.createDoorColliders();
 
@@ -968,6 +973,9 @@ export default class GameScene extends Phaser.Scene {
     this.socketManager.onPlayerInfo = (data) => {
       this.localPlayerId = data.playerId;
       this.localPlayerUsername = data.username || "Adventurer";
+      
+      // Set current player for leaderboard highlighting
+      this.leaderboardUI.setCurrentPlayer(data.playerId);
     };
 
     this.socketManager.onExistingPlayers = (data) => {
@@ -1014,6 +1022,11 @@ export default class GameScene extends Phaser.Scene {
       this.isQuestionActive = false;
       this.correctDoor = null;
       this.openAllDoors();
+      
+      // Update leaderboard with final standings
+      if (data.finalLeaderboard && data.finalLeaderboard.length > 0) {
+        this.leaderboardUI.updateLeaderboard(data.finalLeaderboard);
+      }
     };
 
     this.socketManager.onMovementPhase = (data) => {
@@ -1030,6 +1043,9 @@ export default class GameScene extends Phaser.Scene {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // Open all doors when game starts
       // this.openAllDoors();
+      
+      // Show leaderboard when game starts
+      this.leaderboardUI.show();
     };
 
     this.socketManager.onRoundEnded = (data) => {
@@ -1038,6 +1054,33 @@ export default class GameScene extends Phaser.Scene {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // Lock all doors again after round ends (before next question)
       this.lockAllDoors();
+    };
+
+    this.socketManager.onRoomState = (data) => {
+      // Convert room state to leaderboard format for initial display
+      if (data.players && data.players.length > 0) {
+        const leaderboardData: LeaderboardData[] = data.players
+          .map((player: any) => ({
+            playerId: player.playerId,
+            username: player.username,
+            character: player.character,
+            score: player.score || 0,
+            correctAnswers: 0,
+            rank: 0
+          }))
+          .sort((a: any, b: any) => b.score - a.score)
+          .map((player: any, index: number) => ({
+            ...player,
+            rank: index + 1
+          }));
+        
+        this.leaderboardUI.updateLeaderboard(leaderboardData);
+        
+        // Show leaderboard if game has started
+        if (data.isGameStarted) {
+          this.leaderboardUI.show();
+        }
+      }
     };
   }
 
@@ -1185,6 +1228,12 @@ export default class GameScene extends Phaser.Scene {
     // Hide question UI
     this.questionUI.hide();
 
+    // Update leaderboard with new scores
+    if (data.leaderboard && data.leaderboard.length > 0) {
+      this.leaderboardUI.updateLeaderboard(data.leaderboard);
+      console.log("📊 Leaderboard updated:", data.leaderboard);
+    }
+
     // Open only the correct door
     if (this.correctDoor) {
       this.openDoor(this.correctDoor);
@@ -1250,6 +1299,35 @@ export default class GameScene extends Phaser.Scene {
     console.log(`🔓 Total: ${totalOpened} gates opened\n`);
   }
 
+  /**
+   * Detect which door the player is near (within 100 pixels)
+   */
+  private detectNearbyDoor(): string | null {
+    if (!this.player) return null;
+
+    const detectionRadius = 100; // pixels
+    let nearestDoor: string | null = null;
+    let nearestDistance = Infinity;
+
+    // Check all gates
+    this.gatesByDoorId.forEach((gates, doorId) => {
+      gates.forEach(gate => {
+        const distance = Phaser.Math.Distance.Between(
+          this.player!.x,
+          this.player!.y,
+          gate.sprite.x,
+          gate.sprite.y
+        );
+
+        if (distance < detectionRadius && distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestDoor = doorId;
+        }
+      });
+    });
+
+    return nearestDoor;
+  }
 
   update(time: number, _delta: number): void {
     if (!this.player || !this.cursors) return;
@@ -1388,7 +1466,9 @@ export default class GameScene extends Phaser.Scene {
 
       // Only send if moved significantly (> 5 pixels) or enough time passed (> 100ms)
       if (distance > 5 || time - this.lastPositionUpdate > 100) {
-        this.socketManager.sendMovement(currentPos, null);
+        // Detect which door the player is near
+        const nearbyDoor = this.detectNearbyDoor();
+        this.socketManager.sendMovement(currentPos, nearbyDoor);
         this.lastPositionSent = currentPos;
         this.lastPositionUpdate = time;
       }
@@ -1436,6 +1516,9 @@ export default class GameScene extends Phaser.Scene {
     if (this.isQuestionActive) {
       this.questionUI.update(_delta);
     }
+
+    // Update leaderboard UI (for repositioning if needed)
+    this.leaderboardUI.update();
   }
 
   private handleSlimeDamage(): void {

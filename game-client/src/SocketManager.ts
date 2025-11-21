@@ -35,6 +35,7 @@ export class SocketManager {
   public onGameOver?: (data: any) => void;
   public onMovementPhase?: (data: any) => void;
   public onRoundEnded?: (data: any) => void;
+  public onRoomState?: (data: any) => void;
   
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl;
@@ -95,6 +96,10 @@ export class SocketManager {
     
     this.socket.on('roundEnded', (data) => {
       this.onRoundEnded?.(data);
+    });
+    
+    this.socket.on('roomState', (data) => {
+      this.onRoomState?.(data);
     });
   }
   

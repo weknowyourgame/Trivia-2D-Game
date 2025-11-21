@@ -1336,7 +1336,7 @@ export default class GameScene extends Phaser.Scene {
       }
       
       // Add label
-      const barrierLabel = this.add.text(avgX, colliderY, `ROUND ${round}\nBARRIER`, {
+      const barrierLabel = this.add.text(avgX, colliderY, ``, {
         fontSize: "32px",
         color: "#ffffff",
         fontFamily: "Arial",
@@ -1392,9 +1392,10 @@ export default class GameScene extends Phaser.Scene {
     const collider = this.roundColliders.get(this.currentGameRound);
     if (collider) {
       collider.collider.active = true;
+      
       collider.graphics.setFillStyle(0xff0000, 0); // Red = blocking
       collider.graphics.setVisible(true);
-      collider.label.setVisible(true);
+      collider.label.setVisible(false);
       console.log(`🚧 Round ${this.currentGameRound} barrier UP - question active`);
     }
     
@@ -1479,8 +1480,8 @@ export default class GameScene extends Phaser.Scene {
 
     collider.collider.active = false;
     collider.graphics.setFillStyle(0x00ff00, 0); // Green = open
-    collider.graphics.setVisible(true);
-    collider.label.setVisible(true);
+    collider.graphics.setVisible(false);
+    collider.label.setVisible(false);
     
     console.log(`✅ Round ${round} collider DISABLED (open)`);
   }

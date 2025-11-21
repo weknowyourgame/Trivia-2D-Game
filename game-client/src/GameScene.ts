@@ -901,7 +901,8 @@ export default class GameScene extends Phaser.Scene {
     }) as CursorKeys;
 
     // Initialize multiplayer socket connection
-    this.socketManager = new SocketManager("http://localhost:3000");
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+    this.socketManager = new SocketManager(backendUrl);
     this.setupSocketHandlers();
     this.socketManager.connect();
 

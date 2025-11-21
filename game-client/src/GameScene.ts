@@ -946,7 +946,7 @@ export default class GameScene extends Phaser.Scene {
           
           console.log("⏰ COUNTDOWN FINISHED - Opening all doors for gameplay");
           // Open all doors when countdown finishes (safety check)
-          this.openAllDoors();
+          // this.openAllDoors();
           
           // Fade out the waiting message
           this.tweens.add({
@@ -1021,7 +1021,7 @@ export default class GameScene extends Phaser.Scene {
       console.log("🏃 MOVEMENT PHASE STARTED", data);
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // Open all doors during movement phase
-      this.openAllDoors();
+      // this.openAllDoors();
     };
 
     this.socketManager.onGameStart = (data) => {
@@ -1029,7 +1029,7 @@ export default class GameScene extends Phaser.Scene {
       console.log("🎮 GAME STARTED!", data);
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // Open all doors when game starts
-      this.openAllDoors();
+      // this.openAllDoors();
     };
 
     this.socketManager.onRoundEnded = (data) => {

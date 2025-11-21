@@ -2,7 +2,7 @@ import { Player, ScoreUpdate, LeaderboardEntry } from '../types';
 
 const BASE_SCORE = 100;
 const SPEED_BONUS_MAX = 50;
-const ROUND_DURATION = 15000; // 15 seconds in milliseconds
+const ROUND_DURATION = 8000; // 15 seconds in milliseconds
 
 export class ScoringService {
   /**

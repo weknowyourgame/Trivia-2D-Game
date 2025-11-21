@@ -47,6 +47,16 @@ export default class GameScene extends Phaser.Scene {
   private doorLights: Map<number, Phaser.GameObjects.Light[]> = new Map(); // Map room index to lights
   private roomHeight: number = 0;
   private doorsCrossed: number = 0;
+  
+  // Round-based colliders to prevent skipping ahead or going back
+  private roundColliders: Map<number, { 
+    sprite: Phaser.Physics.Arcade.Sprite, 
+    collider: Phaser.Physics.Arcade.Collider, 
+    graphics: Phaser.GameObjects.Rectangle,
+    label: Phaser.GameObjects.Text,
+    doorPositions: { x: number, y: number }[]
+  }> = new Map();
+  private currentGameRound: number = 0; // Track current game round (0 = not started)
 
   constructor() {
     super({ key: "GameScene" });
@@ -903,6 +913,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Create invisible door colliders
     this.createDoorColliders();
+    
+    // Create round-based colliders to prevent progression
+    this.createRoundColliders();
 
     // Show "Waiting for players" message with countdown
     const waitingText = this.add.text(
@@ -1027,14 +1040,17 @@ export default class GameScene extends Phaser.Scene {
       if (data.finalLeaderboard && data.finalLeaderboard.length > 0) {
         this.leaderboardUI.updateLeaderboard(data.finalLeaderboard);
       }
+      // Remove all round colliders on game over
+      this.removeAllRoundColliders();
     };
 
     this.socketManager.onMovementPhase = (data) => {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       console.log("🏃 MOVEMENT PHASE STARTED", data);
+      console.log(`🏃 Round: ${data.round}`);
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      // Open all doors during movement phase
-      // this.openAllDoors();
+      // Barrier is already down from handleAnswerReveal
+      // Players can move forward now!
     };
 
     this.socketManager.onGameStart = (data) => {
@@ -1046,6 +1062,10 @@ export default class GameScene extends Phaser.Scene {
       
       // Show leaderboard when game starts
       this.leaderboardUI.show();
+      
+      // All barriers should already be up from initialization (rounds 2-19)
+      // Just log for confirmation
+      console.log(`🚧 ${this.roundColliders.size} barriers ready and blocking (rounds 2-19)`);
     };
 
     this.socketManager.onRoundEnded = (data) => {
@@ -1054,6 +1074,29 @@ export default class GameScene extends Phaser.Scene {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // Lock all doors again after round ends (before next question)
       this.lockAllDoors();
+      
+      // Hide the current round's barrier (completed)
+      if (this.currentGameRound > 0) {
+        const currentCollider = this.roundColliders.get(this.currentGameRound);
+        if (currentCollider) {
+          currentCollider.collider.active = false;
+          currentCollider.graphics.setVisible(false);
+          currentCollider.label.setVisible(false);
+          console.log(`✓ Round ${this.currentGameRound} barrier HIDDEN (completed)`);
+        }
+        
+        // Next round's barrier should already be up from initialization
+        // Just ensure it's visible and blocking
+        const nextRound = this.currentGameRound + 1;
+        const nextCollider = this.roundColliders.get(nextRound);
+        if (nextCollider) {
+          nextCollider.collider.active = true;
+          nextCollider.graphics.setFillStyle(0xff0000, 0.6);
+          nextCollider.graphics.setVisible(true);
+          nextCollider.label.setVisible(true);
+          console.log(`🚧 Round ${nextRound} barrier UP (ready for next round)`);
+        }
+      }
     };
 
     this.socketManager.onRoomState = (data) => {
@@ -1203,18 +1246,159 @@ export default class GameScene extends Phaser.Scene {
     console.log(`⚠️  All gates START BLOCKED - Will open on game start`);
   }
 
+  /**
+   * Create round-specific colliders to prevent players from accessing future rounds
+   * These colliders are placed ahead of each round's doors
+   */
+  private createRoundColliders(): void {
+    if (!this.player || !this.layer || !this.map) return;
+
+    const scale = 4;
+    const allDoors: { x: number; y: number }[] = [];
+    
+    // Collect all door positions
+    for (let y = 0; y < this.map.height; y++) {
+      for (let x = 0; x < this.map.width; x++) {
+        const tile = this.layer.getTileAt(x, y);
+        
+        if (tile && tile.index === 287) {
+          const doorWorldX = this.layer.x + (x + 1) * 16 * scale;
+          const doorWorldY = (y + 1) * 16 * scale;
+          allDoors.push({ x: doorWorldX, y: doorWorldY });
+        }
+      }
+    }
+
+    // Sort doors by Y position (descending - highest Y first = bottom of map = round 1)
+    // Players start at bottom (high Y) and move up (low Y)
+    allDoors.sort((a, b) => b.y - a.y);
+
+    // Group doors by rounds (every 4 doors = 1 round)
+    // Create colliders for rounds 2-19 (skip round 1 where players start)
+    const totalRounds = Math.floor(allDoors.length / 4);
+    console.log(`\n🚧 ========== CREATING ROUND COLLIDERS ==========`);
+    console.log(`Total doors found: ${allDoors.length}`);
+    console.log(`Total rounds: ${totalRounds}`);
+    console.log(`Creating colliders for rounds 2-${totalRounds}`);
+
+    // Log first few door positions for debugging
+    console.log(`First 8 doors (bottom to top):`);
+    for (let i = 0; i < Math.min(8, allDoors.length); i++) {
+      const roundNum = Math.floor(i / 4) + 1;
+      console.log(`  Door ${i}: Y=${Math.round(allDoors[i].y)} (Round ${roundNum})`);
+    }
+
+    for (let round = 2; round <= totalRounds; round++) {
+      // Get the 4 doors for this round
+      const startIndex = (round - 1) * 4; // Round 2 starts at index 4, Round 3 at index 8, etc.
+      const roundDoors = allDoors.slice(startIndex, startIndex + 4);
+      
+      if (roundDoors.length === 0) continue;
+
+      // Calculate the average Y position of doors in this round
+      const avgY = roundDoors.reduce((sum, door) => sum + door.y, 0) / roundDoors.length;
+      
+      // Calculate the average X position (center of the map)
+      const avgX = roundDoors.reduce((sum, door) => sum + door.x, 0) / roundDoors.length;
+      
+      // Position collider to prevent players from accessing these doors
+      // Players move UP (decreasing Y = going higher on map)
+      // So we place the barrier BELOW the doors (higher Y = lower on map)
+      // This blocks players from reaching the doors from below
+      const colliderY = avgY + (3 * 16 * scale); // 3 tiles BELOW the doors
+      const colliderWidth = this.map.width * 16 * scale; // Full map width
+      const colliderHeight = 2 * 16 * scale; // 2 tiles tall
+      
+      // Create visual representation (semi-transparent barrier)
+      const barrierGraphics = this.add.rectangle(
+        avgX,
+        colliderY,
+        colliderWidth,
+        colliderHeight,
+        0xff0000, // Red for barriers
+        0.5
+      );
+      barrierGraphics.setDepth(10000);
+      barrierGraphics.setScrollFactor(1);
+      barrierGraphics.setVisible(true); // Start visible
+      
+      // Create physics sprite for collision
+      const barrierSprite = this.physics.add.sprite(avgX, colliderY, "");
+      barrierSprite.setVisible(false);
+      barrierSprite.setImmovable(true);
+      
+      if (barrierSprite.body) {
+        const body = barrierSprite.body as Phaser.Physics.Arcade.Body;
+        body.setSize(colliderWidth, colliderHeight);
+        body.setAllowGravity(false);
+        body.setImmovable(true);
+        body.enable = true;
+      }
+      
+      // Add label
+      const barrierLabel = this.add.text(avgX, colliderY, `ROUND ${round}\nBARRIER`, {
+        fontSize: "32px",
+        color: "#ffffff",
+        fontFamily: "Arial",
+        stroke: "#000000",
+        strokeThickness: 6,
+        align: "center"
+      });
+      barrierLabel.setOrigin(0.5);
+      barrierLabel.setDepth(10001);
+      barrierLabel.setScrollFactor(1);
+      barrierLabel.setVisible(true); // Start visible
+      
+      // Create collider with player (START ACTIVE - blocking by default)
+      const collider = this.physics.add.collider(this.player!, barrierSprite);
+      collider.active = true; // Start active/blocking
+      
+      // Store round collider
+      this.roundColliders.set(round, {
+        sprite: barrierSprite,
+        collider: collider,
+        graphics: barrierGraphics,
+        label: barrierLabel,
+        doorPositions: roundDoors
+      });
+      
+      console.log(`  🚧 Round ${round} barrier:`);
+      console.log(`     - Barrier Y: ${Math.round(colliderY)}`);
+      console.log(`     - Doors Y: ${Math.round(avgY)}`);
+      console.log(`     - Door indices: ${startIndex}-${startIndex + 3}`);
+    }
+
+    console.log(`🚧 Total round colliders created: ${this.roundColliders.size} (rounds 2-${totalRounds})`);
+    console.log(`🚧 All round barriers START UP and BLOCKING\n`);
+  }
+
   private handleQuestion(data: QuestionData): void {
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("📝 QUESTION RECEIVED:", data.text);
+    console.log(`📝 Round: ${data.roundNumber}/${data.totalRounds}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     this.isQuestionActive = true;
     this.correctDoor = null;
+    
+    // Update current game round
+    this.currentGameRound = data.roundNumber;
 
     // Show question UI
     this.questionUI.show(data);
 
     // Lock ALL doors when question appears
     this.lockAllDoors();
+    
+    // Ensure barrier is UP for current round (should already be up, but make sure)
+    const collider = this.roundColliders.get(this.currentGameRound);
+    if (collider) {
+      collider.collider.active = true;
+      collider.graphics.setFillStyle(0xff0000, 0.6); // Red = blocking
+      collider.graphics.setVisible(true);
+      collider.label.setVisible(true);
+      console.log(`🚧 Round ${this.currentGameRound} barrier UP - question active`);
+    }
+    
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 
@@ -1239,6 +1423,11 @@ export default class GameScene extends Phaser.Scene {
       this.openDoor(this.correctDoor);
       console.log(`✅ Door ${this.correctDoor} is now open - players can pass!`);
     }
+    
+    // DISABLE barrier for current round - timer finished, let players through!
+    this.disableRoundCollider(this.currentGameRound);
+    console.log(`✅ Round ${this.currentGameRound} barrier DOWN - players can move forward!`);
+    
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 
@@ -1259,6 +1448,117 @@ export default class GameScene extends Phaser.Scene {
     });
     
     console.log(`🔒 Total: ${totalLocked} gates locked\n`);
+  }
+
+  /**
+   * Enable round collider - blocks access to this round's doors
+   */
+  private enableRoundCollider(round: number): void {
+    const collider = this.roundColliders.get(round);
+    if (!collider) {
+      console.warn(`⚠️ Round ${round} collider not found`);
+      return;
+    }
+
+    collider.collider.active = true;
+    collider.graphics.setFillStyle(0xff0000, 0.6); // Red = blocked
+    collider.graphics.setVisible(true);
+    collider.label.setVisible(true);
+    
+    console.log(`🚧 Round ${round} collider ENABLED (blocking)`);
+  }
+
+  /**
+   * Disable round collider - allows access to this round's doors
+   */
+  private disableRoundCollider(round: number): void {
+    const collider = this.roundColliders.get(round);
+    if (!collider) {
+      console.warn(`⚠️ Round ${round} collider not found`);
+      return;
+    }
+
+    collider.collider.active = false;
+    collider.graphics.setFillStyle(0x00ff00, 0.3); // Green = open
+    collider.graphics.setVisible(true);
+    collider.label.setVisible(true);
+    
+    console.log(`✅ Round ${round} collider DISABLED (open)`);
+  }
+
+  /**
+   * Update round colliders based on current game round
+   * - Disable collider for current round (allow access)
+   * - Enable all colliders for future rounds (block access)
+   * - Hide colliders for past rounds (already completed)
+   */
+  private updateRoundColliders(currentRound: number): void {
+    console.log(`\n🔄 ========== UPDATING ROUND COLLIDERS ==========`);
+    console.log(`Current game round: ${currentRound}`);
+    
+    this.roundColliders.forEach((collider, round) => {
+      if (round < currentRound) {
+        // Past rounds - hide completely (already completed)
+        collider.collider.active = false;
+        collider.graphics.setVisible(false);
+        collider.label.setVisible(false);
+        console.log(`  ✓ Round ${round}: HIDDEN (past)`);
+      } else if (round === currentRound) {
+        // Current round - disable to allow access
+        this.disableRoundCollider(round);
+        console.log(`  ➤ Round ${round}: OPEN (current)`);
+      } else {
+        // Future rounds - enable to block access
+        this.enableRoundCollider(round);
+        console.log(`  ✗ Round ${round}: BLOCKED (future)`);
+      }
+    });
+    
+    console.log(`🔄 =========================================\n`);
+  }
+
+  /**
+   * Remove all round colliders (hide visuals and disable collision)
+   */
+  private removeAllRoundColliders(): void {
+    console.log(`\n🗑️ ========== REMOVING ROUND COLLIDERS ==========`);
+    
+    this.roundColliders.forEach((collider, round) => {
+      // Disable collision
+      collider.collider.active = false;
+      
+      // Hide visuals
+      collider.graphics.setVisible(false);
+      collider.label.setVisible(false);
+      
+      console.log(`  🗑️ Round ${round} collider removed`);
+    });
+    
+    console.log(`🗑️ Total: ${this.roundColliders.size} colliders removed\n`);
+  }
+
+  /**
+   * Destroy all round colliders completely (remove from scene)
+   */
+  private destroyAllRoundColliders(): void {
+    console.log(`\n💥 ========== DESTROYING ROUND COLLIDERS ==========`);
+    
+    this.roundColliders.forEach((collider, round) => {
+      // Destroy collision
+      collider.collider.destroy();
+      
+      // Destroy visuals
+      collider.graphics.destroy();
+      collider.label.destroy();
+      collider.sprite.destroy();
+      
+      console.log(`  💥 Round ${round} collider destroyed`);
+    });
+    
+    // Clear the map
+    this.roundColliders.clear();
+    
+    console.log(`💥 All round colliders destroyed and cleared\n`);
   }
 
   /**

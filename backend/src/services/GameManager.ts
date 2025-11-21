@@ -4,7 +4,7 @@ import { getRandomQuestions } from '../data/questions';
 
 const TOTAL_ROUNDS = 20;
 const MOVEMENT_PHASE_DURATION = 3000; // 3 seconds
-const QUESTION_PHASE_DURATION = 15000; // 15 seconds
+const QUESTION_PHASE_DURATION = 8000; // 15 seconds
 const ANSWER_REVIEW_DURATION = 5000; // 5 seconds
 const ROUND_END_DURATION = 2000; // 2 seconds
 

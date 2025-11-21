@@ -122,6 +122,7 @@ export class SocketHandlers {
 
     // If in question phase and player is at a door, record it
     if (game.phase === GamePhase.QUESTION_ACTIVE && data.door) {
+      console.log(`🚪 ${player.username} is at door ${data.door} (Phase: ${game.phase})`);
       this.playerManager.recordAnswerTime(player.playerId, Date.now());
       this.gameManager.recordPlayerDoor(game.gameId, player.playerId);
     }
@@ -436,6 +437,15 @@ export class SocketHandlers {
 
     // Calculate scores
     const players = this.playerManager.getPlayersInRoom(game.roomId);
+    
+    // Debug: Log player door choices
+    console.log("━━━━━━━━ SCORING DEBUG ━━━━━━━━");
+    console.log(`Correct Answer: ${correctAnswer}`);
+    players.forEach(p => {
+      console.log(`  Player ${p.username}: chose door ${p.currentDoor || 'NONE'}`);
+    });
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
     const scoreUpdates = this.scoringService.generateScoreUpdates(
       players,
       correctAnswer,
@@ -445,6 +455,7 @@ export class SocketHandlers {
     // Update player scores
     for (const update of scoreUpdates) {
       this.playerManager.updatePlayerScore(update.playerId, update.scoreGained, update.isCorrect);
+      console.log(`📊 ${update.username}: ${update.isCorrect ? '✓' : '✗'} +${update.scoreGained} points (total: ${update.totalScore})`);
     }
 
     // Generate leaderboard

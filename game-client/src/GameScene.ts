@@ -199,9 +199,12 @@ export default class GameScene extends Phaser.Scene {
         ];
         // Desert objects with collision: firstgid=325, so tile IDs are 325+4, 325+5, etc.
         const desertCollisionTiles = [
-          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379
+          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379,
         ]; // tiles 4,5,8,9,10,20,21,40,41,42,43,53,54 offset by firstgid 325
-        this.layer.setCollision([...collisionTileIndexes, ...desertCollisionTiles]);
+        this.layer.setCollision([
+          ...collisionTileIndexes,
+          ...desertCollisionTiles,
+        ]);
 
         worldWidth = this.map.width * 16 * scale;
         worldHeight = this.map.height * 16 * scale;
@@ -224,13 +227,16 @@ export default class GameScene extends Phaser.Scene {
         this.layer2.setScale(scale);
         this.layer2.setPipeline("Light2D"); // Enable lighting on layer 2
         this.layer2.x = this.layer.x; // Align with layer 1
-        
+
         // Set collision on desert object tiles in layer 2
         const desertCollisionTiles = [
-          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379
+          329, 330, 333, 334, 335, 345, 346, 365, 366, 367, 368, 378, 379,
         ];
         this.layer2.setCollision(desertCollisionTiles);
-        console.log("Set collision on desert tiles in Layer 2:", desertCollisionTiles);
+        console.log(
+          "Set collision on desert tiles in Layer 2:",
+          desertCollisionTiles
+        );
       }
     }
 
@@ -238,13 +244,15 @@ export default class GameScene extends Phaser.Scene {
     this.wallsGroup = this.physics.add.staticGroup();
 
     console.log("Setting up collisions...");
-    
+
     // Check Layer 1 for collisions
     if (this.layer) {
-      console.log(`Checking Layer 1: ${this.map.width}x${this.map.height} tiles`);
+      console.log(
+        `Checking Layer 1: ${this.map.width}x${this.map.height} tiles`
+      );
       let layer1Collisions = 0;
       let desertObjectsFound = 0;
-      
+
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
           const tile: Phaser.Tilemaps.Tile | null = this.layer.getTileAt(x, y);
@@ -252,30 +260,46 @@ export default class GameScene extends Phaser.Scene {
             layer1Collisions++;
             const tileWorldX = this.layer.x + x * 16 * scale;
             const tileWorldY = y * 16 * scale;
-            
+
             // Check if this is a desert object tile with custom collision
             const tileId = tile.index;
-            const desertCollisionShapes: { [key: number]: { x: number; y: number; width: number; height: number }[] } = {
-              329: [{ x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 }], // tile 4
+            const desertCollisionShapes: {
+              [key: number]: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+              }[];
+            } = {
+              329: [
+                { x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 },
+              ], // tile 4
               330: [{ x: 3.00917, y: 4, width: 12, height: 8.97248 }], // tile 5
               333: [{ x: 1.69725, y: -0.0366972, width: 13.5321, height: 16 }], // tile 8
-              334: [{ x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 }, { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 }], // tile 9
+              334: [
+                { x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 },
+                { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 },
+              ], // tile 9
               335: [{ x: 0, y: 2, width: 10, height: 14 }], // tile 10
               345: [{ x: 4.00917, y: 0, width: 11.9908, height: 12.578 }], // tile 20
               346: [{ x: 0, y: 0, width: 12.5688, height: 14.422 }], // tile 21
               365: [{ x: 1, y: 0, width: 14, height: 16 }], // tile 40
-              366: [{ x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 }], // tile 41
-              367: [{ x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 }], // tile 42
+              366: [
+                { x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 },
+              ], // tile 41
+              367: [
+                { x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 },
+              ], // tile 42
               368: [{ x: 0, y: 2.42202, width: 13.3211, height: 13.578 }], // tile 43 (using second object)
               378: [{ x: 5.3945, y: 0, width: 10.6055, height: 16 }], // tile 53
               379: [{ x: 0, y: 0, width: 8.53211, height: 15.7798 }], // tile 54
             };
-            
+
             if (desertCollisionShapes[tileId] && this.wallsGroup) {
               desertObjectsFound++;
               console.log(`Found desert object tile ${tileId} at (${x}, ${y})`);
               // Create custom collision bodies for desert objects
-              desertCollisionShapes[tileId].forEach(shape => {
+              desertCollisionShapes[tileId].forEach((shape) => {
                 if (this.wallsGroup) {
                   const wall = this.wallsGroup.create(
                     tileWorldX + (shape.x + shape.width / 2) * scale,
@@ -301,15 +325,19 @@ export default class GameScene extends Phaser.Scene {
           }
         }
       }
-      console.log(`Layer 1: Found ${layer1Collisions} collision tiles, ${desertObjectsFound} desert objects`);
+      console.log(
+        `Layer 1: Found ${layer1Collisions} collision tiles, ${desertObjectsFound} desert objects`
+      );
     }
-    
+
     // Check Layer 2 for desert object collisions
     if (this.layer2) {
-      console.log(`Checking Layer 2: ${this.map.width}x${this.map.height} tiles`);
+      console.log(
+        `Checking Layer 2: ${this.map.width}x${this.map.height} tiles`
+      );
       let layer2Collisions = 0;
       let desertObjectsFound = 0;
-      
+
       for (let y = 0; y < this.map.height; y++) {
         for (let x = 0; x < this.map.width; x++) {
           const tile: Phaser.Tilemaps.Tile | null = this.layer2.getTileAt(x, y);
@@ -317,30 +345,48 @@ export default class GameScene extends Phaser.Scene {
             layer2Collisions++;
             const tileWorldX = this.layer2.x + x * 16 * scale;
             const tileWorldY = y * 16 * scale;
-            
+
             // Check if this is a desert object tile with custom collision
             const tileId = tile.index;
-            const desertCollisionShapes: { [key: number]: { x: number; y: number; width: number; height: number }[] } = {
-              329: [{ x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 }], // tile 4
+            const desertCollisionShapes: {
+              [key: number]: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+              }[];
+            } = {
+              329: [
+                { x: 1.79817, y: 2.90826, width: 12.2202, height: 11.1468 },
+              ], // tile 4
               330: [{ x: 3.00917, y: 4, width: 12, height: 8.97248 }], // tile 5
               333: [{ x: 1.69725, y: -0.0366972, width: 13.5321, height: 16 }], // tile 8
-              334: [{ x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 }, { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 }], // tile 9
+              334: [
+                { x: 13.1927, y: 7.08257, width: 2.80734, height: 8.91743 },
+                { x: 6.12844, y: 14.0917, width: 7.22936, height: 1.65138 },
+              ], // tile 9
               335: [{ x: 0, y: 2, width: 10, height: 14 }], // tile 10
               345: [{ x: 4.00917, y: 0, width: 11.9908, height: 12.578 }], // tile 20
               346: [{ x: 0, y: 0, width: 12.5688, height: 14.422 }], // tile 21
               365: [{ x: 1, y: 0, width: 14, height: 16 }], // tile 40
-              366: [{ x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 }], // tile 41
-              367: [{ x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 }], // tile 42
+              366: [
+                { x: 1.68807, y: 4.00917, width: 11.8807, height: 11.9908 },
+              ], // tile 41
+              367: [
+                { x: 2.20183, y: 1.98165, width: 13.7982, height: 14.0183 },
+              ], // tile 42
               368: [{ x: 0, y: 2.42202, width: 13.3211, height: 13.578 }], // tile 43 (using second object)
               378: [{ x: 5.3945, y: 0, width: 10.6055, height: 16 }], // tile 53
               379: [{ x: 0, y: 0, width: 8.53211, height: 15.7798 }], // tile 54
             };
-            
+
             if (desertCollisionShapes[tileId] && this.wallsGroup) {
               desertObjectsFound++;
-              console.log(`Found desert object tile ${tileId} at (${x}, ${y}) in Layer 2`);
+              console.log(
+                `Found desert object tile ${tileId} at (${x}, ${y}) in Layer 2`
+              );
               // Create custom collision bodies for desert objects
-              desertCollisionShapes[tileId].forEach(shape => {
+              desertCollisionShapes[tileId].forEach((shape) => {
                 if (this.wallsGroup) {
                   const wall = this.wallsGroup.create(
                     tileWorldX + (shape.x + shape.width / 2) * scale,
@@ -350,14 +396,18 @@ export default class GameScene extends Phaser.Scene {
                   wall.setSize(shape.width * scale, shape.height * scale);
                   wall.setVisible(false);
                   wall.refreshBody();
-                  console.log(`  Created collision body at (${wall.x}, ${wall.y}) size ${wall.displayWidth}x${wall.displayHeight}`);
+                  console.log(
+                    `  Created collision body at (${wall.x}, ${wall.y}) size ${wall.displayWidth}x${wall.displayHeight}`
+                  );
                 }
               });
             }
           }
         }
       }
-      console.log(`Layer 2: Found ${layer2Collisions} collision tiles, ${desertObjectsFound} desert objects`);
+      console.log(
+        `Layer 2: Found ${layer2Collisions} collision tiles, ${desertObjectsFound} desert objects`
+      );
     }
 
     // Create player sprite (spawn at bottom of the map)
@@ -566,8 +616,10 @@ export default class GameScene extends Phaser.Scene {
               0.3 // Make it visible for debugging
             );
             this.physics.add.existing(crossingZone);
-            (crossingZone.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
-            
+            (crossingZone.body as Phaser.Physics.Arcade.Body).setAllowGravity(
+              false
+            );
+
             (doorSprite as any).crossingZone = crossingZone;
 
             // Detect when player crosses through the door
@@ -575,14 +627,24 @@ export default class GameScene extends Phaser.Scene {
               this.player,
               crossingZone,
               () => {
-                const username = localStorage.getItem("playerUsername") || "Adventurer";
-                console.log(`🚪 Player ${username} is in crossing zone at (${x}, ${y}), doorOpened: ${(doorSprite as any).doorOpened}, playerCrossed: ${(doorSprite as any).playerCrossed}`);
-                
+                const username =
+                  localStorage.getItem("playerUsername") || "Adventurer";
+                console.log(
+                  `🚪 Player ${username} is in crossing zone at (${x}, ${y}), doorOpened: ${
+                    (doorSprite as any).doorOpened
+                  }, playerCrossed: ${(doorSprite as any).playerCrossed}`
+                );
+
                 // Only trigger once per door opening
-                if ((doorSprite as any).doorOpened && !(doorSprite as any).playerCrossed) {
+                if (
+                  (doorSprite as any).doorOpened &&
+                  !(doorSprite as any).playerCrossed
+                ) {
                   (doorSprite as any).playerCrossed = true;
-                  console.log(`✅ Player ${username} CROSSED through door at (${x}, ${y})`);
-                  
+                  console.log(
+                    `✅ Player ${username} CROSSED through door at (${x}, ${y})`
+                  );
+
                   // TODO :  add more logic here, like:
                   // - Emit socket event
                   // - Trigger next round
@@ -838,32 +900,63 @@ export default class GameScene extends Phaser.Scene {
     // Create invisible door colliders
     this.createDoorColliders();
 
-    // Show welcome message with username
-    const username = localStorage.getItem("playerUsername") || "Adventurer";
-    const welcomeText = this.add.text(
+    // Show "Waiting for players" message with countdown
+    const waitingText = this.add.text(
       this.cameras.main.width / 2,
-      50,
-      `Welcome, ${username}!`,
+      this.cameras.main.height / 2 - 50,
+      "Waiting for players to join the journey...",
       {
-        fontSize: "32px",
+        fontSize: "36px",
         color: "#FFD700",
-        fontFamily: "Arial",
+        fontFamily: "Cinzel, Georgia, serif",
         stroke: "#000000",
-        strokeThickness: 4,
+        strokeThickness: 6,
+        align: "center",
       }
     );
-    welcomeText.setOrigin(0.5);
-    welcomeText.setScrollFactor(0);
-    welcomeText.setDepth(10000);
+    waitingText.setOrigin(0.5);
+    waitingText.setScrollFactor(0);
+    waitingText.setDepth(10000);
 
-    // Fade out after 3 seconds
-    this.time.delayedCall(3000, () => {
-      this.tweens.add({
-        targets: welcomeText,
-        alpha: 0,
-        duration: 1000,
-        onComplete: () => welcomeText.destroy(),
-      });
+    const countdownText = this.add.text(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2 + 30,
+      "10",
+      {
+        fontSize: "72px",
+        color: "#FFFFFF",
+        fontFamily: "Cinzel, Georgia, serif",
+        stroke: "#000000",
+        strokeThickness: 8,
+      }
+    );
+    countdownText.setOrigin(0.5);
+    countdownText.setScrollFactor(0);
+    countdownText.setDepth(10000);
+
+    // Countdown from 10 seconds
+    let timeRemaining = 10;
+    const countdownTimer = this.time.addEvent({
+      delay: 1000,
+      callback: () => {
+        timeRemaining--;
+        countdownText.setText(timeRemaining.toString());
+
+        if (timeRemaining <= 0) {
+          countdownTimer.remove();
+          // Fade out the waiting message
+          this.tweens.add({
+            targets: [waitingText, countdownText],
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => {
+              waitingText.destroy();
+              countdownText.destroy();
+            },
+          });
+        }
+      },
+      repeat: 9, // Repeat 9 times (10 total including initial)
     });
   }
 
@@ -1091,7 +1184,9 @@ export default class GameScene extends Phaser.Scene {
 
       const detectionZone = (doorSprite as any).detectionZone;
       const playerInZone =
-        detectionZone && this.player && this.physics.overlap(this.player, detectionZone);
+        detectionZone &&
+        this.player &&
+        this.physics.overlap(this.player, detectionZone);
 
       // Update player in zone state
       const wasInZone = (doorSprite as any).playerInZone;
@@ -1113,20 +1208,25 @@ export default class GameScene extends Phaser.Scene {
         }
         // Check if player crossed through the door
         const crossingZone = (doorSprite as any).crossingZone;
-        const inCrossingZone = crossingZone && this.player && this.physics.overlap(this.player, crossingZone);
+        const inCrossingZone =
+          crossingZone &&
+          this.player &&
+          this.physics.overlap(this.player, crossingZone);
         const wasInCrossingZone = (doorSprite as any).wasInCrossingZone;
-        
+
         // If player just entered crossing zone (wasn't there before), they crossed!
         if (inCrossingZone && !wasInCrossingZone) {
           this.doorsCrossed++;
-          console.log(`🚪 Player ${this.localPlayerUsername} crossed door #${this.doorsCrossed}`);
-          
+          console.log(
+            `🚪 Player ${this.localPlayerUsername} crossed door #${this.doorsCrossed}`
+          );
+
           // Notify backend
           this.socketManager.sendDoorCrossed();
         }
-        
+
         (doorSprite as any).wasInCrossingZone = inCrossingZone;
-        
+
         // If player left zone and door was open, close it
         if (currentFrame === 5 && !playerInZone && wasInZone) {
           (doorSprite as any).doorOpened = false; // Reset flag
